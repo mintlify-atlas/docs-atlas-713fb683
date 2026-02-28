@@ -273,6 +273,148 @@ asyncio.run(main())
 
 ---
 
+### RustClient()
+
+Create a client using Rust bindings for improved performance. Can be ephemeral or persistent.
+
+<Note>
+  This client uses the Rust implementation for better performance. It's useful for testing and development but not recommended for production use.
+</Note>
+
+```python
+import chromadb
+
+# Ephemeral client (in-memory)
+client = chromadb.RustClient()
+
+# Persistent client
+client = chromadb.RustClient(path="./chroma_data")
+```
+
+**Parameters:**
+
+<ParamField path="path" type="str" optional>
+  Optional directory to save Chroma's data to. If None, the client is ephemeral (in-memory).
+</ParamField>
+
+<ParamField path="settings" type="Settings" optional>
+  Optional settings to override defaults.
+</ParamField>
+
+<ParamField path="tenant" type="str" default="default_tenant">
+  Tenant name to use for requests.
+</ParamField>
+
+<ParamField path="database" type="str" default="default_database">
+  Database name to use for requests.
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="ClientAPI">
+  A configured Rust-backed client instance.
+</ResponseField>
+
+---
+
+### AdminClient()
+
+Create an admin client for tenant and database management operations.
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+# Create admin client
+admin_client = chromadb.AdminClient(
+    settings=Settings(
+        chroma_server_host="localhost",
+        chroma_server_http_port=8000
+    )
+)
+
+# Create a new tenant
+admin_client.create_tenant(name="my_tenant")
+
+# Create a database
+admin_client.create_database(name="my_database", tenant="my_tenant")
+
+# List tenants
+tenants = admin_client.list_tenants()
+```
+
+**Parameters:**
+
+<ParamField path="settings" type="Settings" required>
+  Settings for connecting to the Chroma server.
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="AdminAPI">
+  An admin client for tenant and database management.
+</ResponseField>
+
+**Admin Operations:**
+- `create_tenant(name)` - Create a new tenant
+- `get_tenant(name)` - Get tenant information
+- `list_tenants()` - List all tenants
+- `create_database(name, tenant)` - Create a database in a tenant
+- `get_database(name, tenant)` - Get database information
+- `list_databases(tenant)` - List databases in a tenant
+
+---
+
+## Global Configuration
+
+### configure()
+
+Override Chroma's default settings globally.
+
+```python
+import chromadb
+
+# Configure global settings
+chromadb.configure(
+    chroma_api_impl="chromadb.api.segment.SegmentAPI",
+    chroma_server_host="localhost",
+    chroma_server_http_port=8000
+)
+
+# All clients created after this will use these settings
+client = chromadb.Client()
+```
+
+**Parameters:**
+
+Accepts any Settings parameter as a keyword argument. Common settings include:
+- `chroma_api_impl` - API implementation to use
+- `chroma_server_host` - Server hostname
+- `chroma_server_http_port` - Server port
+- `anonymized_telemetry` - Enable/disable telemetry
+
+---
+
+### get_settings()
+
+Get the current global settings.
+
+```python
+import chromadb
+
+settings = chromadb.get_settings()
+print(settings.chroma_server_host)
+print(settings.chroma_server_http_port)
+```
+
+**Returns:**
+
+<ResponseField name="return" type="Settings">
+  The current global Settings object.
+</ResponseField>
+
+---
+
 ## Collection Management
 
 ### create_collection()

@@ -525,6 +525,135 @@ collection.modify(
 
 ---
 
+### fork()
+
+Fork the current collection under a new name with identical data.
+
+<Warning>
+  This is an experimental API that only works for Hosted Chroma.
+</Warning>
+
+```python
+new_collection = collection.fork(new_name="my_collection_backup")
+```
+
+**Parameters:**
+
+<ParamField path="new_name" type="str" required>
+  The name of the new collection.
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Collection">
+  A new collection with the specified name containing identical data to the current collection.
+</ResponseField>
+
+---
+
+### attach_function()
+
+Attach a function to this collection for automated processing.
+
+```python
+from chromadb.api.functions import Function
+
+attached_fn, created = collection.attach_function(
+    function=Function.STATISTICS_FUNCTION,
+    name="mycoll_stats_fn",
+    output_collection="mycoll_stats"
+)
+
+if created:
+    print("New function attached")
+else:
+    print("Function already existed")
+```
+
+**Parameters:**
+
+<ParamField path="function" type="Function" required>
+  A Function enum value (e.g., `STATISTICS_FUNCTION`, `RECORD_COUNTER_FUNCTION`)
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Unique name for this attached function
+</ParamField>
+
+<ParamField path="output_collection" type="str" required>
+  Name of the collection where function output will be stored
+</ParamField>
+
+<ParamField path="params" type="Dict[str, Any]" optional>
+  Optional dictionary with function-specific parameters
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="Tuple[AttachedFunction, bool]">
+  Tuple of (AttachedFunction, created) where created is True if newly created, False if already existed
+</ResponseField>
+
+---
+
+### get_attached_function()
+
+Get an attached function by name for this collection.
+
+```python
+attached_fn = collection.get_attached_function(name="mycoll_stats_fn")
+```
+
+**Parameters:**
+
+<ParamField path="name" type="str" required>
+  Name of the attached function
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="AttachedFunction">
+  The attached function object
+</ResponseField>
+
+**Raises:**
+- `NotFoundError`: If the attached function doesn't exist
+
+---
+
+### detach_function()
+
+Detach a function from this collection.
+
+```python
+# Detach function but keep output collection
+success = collection.detach_function(name="mycoll_stats_fn")
+
+# Detach function and delete output collection
+success = collection.detach_function(
+    name="mycoll_stats_fn",
+    delete_output_collection=True
+)
+```
+
+**Parameters:**
+
+<ParamField path="name" type="str" required>
+  The name of the attached function
+</ParamField>
+
+<ParamField path="delete_output_collection" type="bool" default="False">
+  Whether to also delete the output collection
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="return" type="bool">
+  True if successful
+</ResponseField>
+
+---
+
 ## Collection Properties
 
 ### name
