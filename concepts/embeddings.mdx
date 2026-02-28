@@ -1,0 +1,333 @@
+---
+title: Embeddings
+description: Understanding embeddings and how Chroma handles vector representations
+---
+
+Embeddings are at the heart of how Chroma enables semantic search over your data.
+
+## What are Embeddings?
+
+Embeddings transform text, images, or other data into numerical vectors (lists of numbers) that capture semantic meaning. Documents with similar meanings will have similar vector representations.
+
+### Why Embeddings Matter
+
+<AccordionGroup>
+  <Accordion title="By Analogy" icon="lightbulb">
+    An embedding represents the **essence** of a document. This enables documents and queries with the same essence to be "near" each other and therefore easy to find.
+  </Accordion>
+
+  <Accordion title="Literal Explanation" icon="code">
+    Embedding something turns it from image/text/audio into a list of numbers:
+    
+    ```
+    "Golden Gate Bridge" => [1.2, 2.1, 0.5, ...]
+    ```
+    
+    This process makes documents "understandable" to a machine learning model.
+  </Accordion>
+
+  <Accordion title="Technical Definition" icon="graduation-cap">
+    An embedding is the latent-space position of a document at a layer of a deep neural network. For models trained specifically to embed data, this is the last layer.
+  </Accordion>
+</AccordionGroup>
+
+### Example: Photo Search
+
+If you search your photos for "famous bridge in San Francisco", Chroma:
+1. Embeds the query text into a vector
+2. Compares it to the embeddings of your photos and their metadata
+3. Returns photos of the Golden Gate Bridge
+
+Chroma uses nearest neighbor search on these vectors rather than substring matching like traditional databases.
+
+## Automatic Embedding
+
+Chroma handles embeddings automatically. When you add documents without providing embeddings, Chroma will embed them for you:
+
+```python
+collection.add(
+    documents=["This is document1", "This is document2"],
+    ids=["doc1", "doc2"]
+)
+# Chroma automatically creates embeddings for the documents
+```
+
+## Default Embedding Function
+
+By default, Chroma uses the [Sentence Transformers](https://www.sbert.net/) `all-MiniLM-L6-v2` model via ONNX:
+
+```python
+from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
+
+embedding_function = ONNXMiniLM_L6_V2()
+embeddings = embedding_function(["Hello world"])
+# Returns: list of numpy arrays with 384 dimensions
+```
+
+This model:
+- Runs locally (no API calls)
+- Produces 384-dimensional embeddings
+- Works well for general-purpose text
+
+## Custom Embedding Functions
+
+You can use custom embedding functions for better performance or domain-specific needs:
+
+### OpenAI Embeddings
+
+```python
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+embedding_function = OpenAIEmbeddingFunction(
+    api_key="your-api-key",
+    model_name="text-embedding-3-small"
+)
+
+collection = client.create_collection(
+    name="my_collection",
+    embedding_function=embedding_function
+)
+```
+
+### Cohere Embeddings
+
+```python
+from chromadb.utils.embedding_functions import CohereEmbeddingFunction
+
+embedding_function = CohereEmbeddingFunction(
+    api_key="your-api-key",
+    model_name="embed-english-v3.0"
+)
+```
+
+### Sentence Transformers
+
+```python
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="all-mpnet-base-v2"
+)
+```
+
+## Providing Your Own Embeddings
+
+You can provide pre-computed embeddings when adding data:
+
+```python
+import numpy as np
+
+# Pre-computed embeddings (e.g., from your own model)
+embeddings = [
+    np.array([0.1, 0.2, 0.3, ...]),  # 384 dimensions
+    np.array([0.4, 0.5, 0.6, ...])
+]
+
+collection.add(
+    ids=["doc1", "doc2"],
+    embeddings=embeddings,
+    documents=["Document 1", "Document 2"]
+)
+```
+
+## Embedding Types
+
+Chroma supports different embedding formats:
+
+### Dense Vectors
+
+Standard numerical vectors (most common):
+
+```python
+from chromadb.api.types import Embedding, PyEmbedding
+
+# As numpy array (Embedding)
+embedding: Embedding = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+
+# As Python list (PyEmbedding)
+py_embedding: PyEmbedding = [0.1, 0.2, 0.3]
+```
+
+### Sparse Vectors
+
+Efficient representation for high-dimensional sparse data:
+
+```python
+from chromadb.api.types import SparseVector
+
+# Only store non-zero dimensions
+sparse_vector = SparseVector(
+    indices=[0, 5, 100],      # Dimension indices
+    values=[0.5, 0.3, 0.8],   # Corresponding values
+    labels=["word1", "word2", "word3"]  # Optional labels
+)
+
+# Store in metadata
+collection.add(
+    ids=["doc1"],
+    embeddings=[[0.1, 0.2, 0.3]],  # Dense embedding
+    metadatas=[{"sparse_embedding": sparse_vector}]
+)
+```
+
+Sparse vectors are validated automatically:
+- Indices must be non-negative integers
+- Indices must be sorted in ascending order
+- No duplicate indices allowed
+- `indices`, `values`, and `labels` (if provided) must have the same length
+
+## Multi-Modal Embeddings
+
+Chroma supports embedding different types of data:
+
+### Text Documents
+
+```python
+collection.add(
+    documents=["Text to embed"],
+    ids=["doc1"]
+)
+```
+
+### Images
+
+```python
+import numpy as np
+from PIL import Image
+
+# Load image as numpy array
+image = np.array(Image.open("photo.jpg"))
+
+collection.add(
+    images=[image],
+    ids=["img1"]
+)
+```
+
+### URIs (URLs or file paths)
+
+```python
+collection.add(
+    uris=["https://example.com/image.jpg", "file:///path/to/image.jpg"],
+    ids=["uri1", "uri2"]
+)
+```
+
+## Embedding Function Interface
+
+Create custom embedding functions by implementing the `EmbeddingFunction` protocol:
+
+```python
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
+
+class MyEmbeddingFunction(EmbeddingFunction[Documents]):
+    def __init__(self):
+        # Initialize your model
+        pass
+    
+    def __call__(self, input: Documents) -> Embeddings:
+        # Embed documents and return numpy arrays
+        embeddings = []  # Your embedding logic here
+        return embeddings
+    
+    @staticmethod
+    def name() -> str:
+        return "my-embedding-function"
+    
+    def get_config(self) -> dict:
+        return {"param1": "value1"}
+    
+    @staticmethod
+    def build_from_config(config: dict):
+        return MyEmbeddingFunction()
+```
+
+Key methods:
+- `__call__()`: Takes documents and returns embeddings
+- `name()`: Returns a unique identifier
+- `get_config()`: Returns serializable configuration
+- `build_from_config()`: Reconstructs from configuration
+
+## Query Embeddings vs Document Embeddings
+
+Some models produce different embeddings for queries vs documents:
+
+```python
+class MyEmbeddingFunction(EmbeddingFunction[Documents]):
+    def __call__(self, input: Documents) -> Embeddings:
+        # Embed documents for storage
+        return self.embed_documents(input)
+    
+    def embed_query(self, input: Documents) -> Embeddings:
+        # Embed queries for search (different from documents)
+        return self.embed_for_search(input)
+```
+
+Chroma automatically uses `embed_query()` when you query with text.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Match embedding dimensions">
+    All embeddings in a collection must have the same dimensions:
+    ```python
+    # Good - all 384 dimensions
+    collection.add(
+        embeddings=[
+            np.array([0.1] * 384),
+            np.array([0.2] * 384)
+        ]
+    )
+    
+    # Bad - mismatched dimensions will fail
+    collection.add(
+        embeddings=[
+            np.array([0.1] * 384),
+            np.array([0.2] * 512)  # Error!
+        ]
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Choose appropriate models">
+    Select embedding models based on your data:
+    - General text: `all-MiniLM-L6-v2` (default)
+    - High quality: `text-embedding-3-large` (OpenAI)
+    - Multilingual: `embed-multilingual-v3.0` (Cohere)
+    - Code: `text-embedding-ada-002` (OpenAI)
+  </Accordion>
+
+  <Accordion title="Be consistent with embedding functions">
+    Use the same embedding function for both adding and querying:
+    ```python
+    # Create collection with embedding function
+    collection = client.create_collection(
+        name="docs",
+        embedding_function=my_embedding_fn
+    )
+    
+    # Always get collection with same function
+    collection = client.get_collection(
+        name="docs",
+        embedding_function=my_embedding_fn
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Metadata" icon="tags" href="/concepts/metadata">
+    Learn about metadata and filtering
+  </Card>
+  <Card title="Querying" icon="magnifying-glass" href="/concepts/querying">
+    Query your embeddings with similarity search
+  </Card>
+  <Card title="OpenAI Embeddings" icon="brain" href="/integrations/openai">
+    Use OpenAI embedding models
+  </Card>
+  <Card title="Embedding Functions" icon="plus" href="/guides/embedding-functions">
+    Learn about embedding functions
+  </Card>
+</CardGroup>

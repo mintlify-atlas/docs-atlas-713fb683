@@ -1,0 +1,554 @@
+---
+title: Client API
+description: Python client for connecting to Chroma and managing collections
+---
+
+The Client API provides the main entry point for interacting with Chroma. Use client constructors to create connections and client methods to manage collections.
+
+## Client Constructors
+
+### EphemeralClient()
+
+Create an in-memory client for testing and development.
+
+<CodeGroup>
+```python Basic Usage
+import chromadb
+
+client = chromadb.EphemeralClient()
+```
+
+```python With Settings
+import chromadb
+from chromadb.config import Settings
+
+client = chromadb.EphemeralClient(
+    settings=Settings(anonymized_telemetry=False)
+)
+```
+</CodeGroup>
+
+<ParamField path="settings" type="Settings" optional>
+  Optional settings to override defaults.
+</ParamField>
+
+<ParamField path="tenant" type="str" default="default_tenant">
+  Tenant name to use for requests.
+</ParamField>
+
+<ParamField path="database" type="str" default="default_database">
+  Database name to use for requests.
+</ParamField>
+
+<ResponseField name="return" type="ClientAPI">
+  A configured client instance that stores all data in memory.
+</ResponseField>
+
+<Note>
+  Data in EphemeralClient is not persisted to disk and will be lost when the client is closed.
+</Note>
+
+---
+
+### PersistentClient()
+
+Create a persistent client that stores data on disk.
+
+<CodeGroup>
+```python Basic Usage
+import chromadb
+
+client = chromadb.PersistentClient(path="./chroma_data")
+```
+
+```python With Context Manager
+import chromadb
+
+with chromadb.PersistentClient(path="./chroma_data") as client:
+    # Use client
+    collection = client.get_or_create_collection("my_collection")
+# Client is automatically closed
+```
+</CodeGroup>
+
+<ParamField path="path" type="str | Path" default="./chroma">
+  Directory to store persisted data.
+</ParamField>
+
+<ParamField path="settings" type="Settings" optional>
+  Optional settings to override defaults.
+</ParamField>
+
+<ParamField path="tenant" type="str" default="default_tenant">
+  Tenant name to use for requests.
+</ParamField>
+
+<ParamField path="database" type="str" default="default_database">
+  Database name to use for requests.
+</ParamField>
+
+<ResponseField name="return" type="ClientAPI">
+  A configured client instance that persists data to disk.
+</ResponseField>
+
+<Tip>
+  For production use, prefer a server-backed Chroma instance using `HttpClient()` or `CloudClient()`.
+</Tip>
+
+---
+
+### HttpClient()
+
+Create a client that connects to a Chroma server over HTTP.
+
+<CodeGroup>
+```python Basic Usage
+import chromadb
+
+client = chromadb.HttpClient(host="localhost", port=8000)
+```
+
+```python With SSL and Headers
+import chromadb
+
+client = chromadb.HttpClient(
+    host="chroma.example.com",
+    port=443,
+    ssl=True,
+    headers={"Authorization": "Bearer token"}
+)
+```
+</CodeGroup>
+
+<ParamField path="host" type="str" default="localhost">
+  Hostname of the Chroma server.
+</ParamField>
+
+<ParamField path="port" type="int" default="8000">
+  HTTP port of the Chroma server.
+</ParamField>
+
+<ParamField path="ssl" type="bool" default="false">
+  Whether to enable SSL for the connection.
+</ParamField>
+
+<ParamField path="headers" type="Dict[str, str]" optional>
+  Optional headers to send with each request.
+</ParamField>
+
+<ParamField path="settings" type="Settings" optional>
+  Optional settings to override defaults.
+</ParamField>
+
+<ParamField path="tenant" type="str" default="default_tenant">
+  Tenant name to use for requests.
+</ParamField>
+
+<ParamField path="database" type="str" default="default_database">
+  Database name to use for requests.
+</ParamField>
+
+<ResponseField name="return" type="ClientAPI">
+  A configured client instance connected to a Chroma server.
+</ResponseField>
+
+<ResponseField name="raises" type="ValueError">
+  If settings specify a different host or port.
+</ResponseField>
+
+---
+
+### CloudClient()
+
+Create a client for Chroma Cloud.
+
+<CodeGroup>
+```python Basic Usage
+import chromadb
+
+client = chromadb.CloudClient(
+    api_key="your-api-key"
+)
+```
+
+```python With Environment Variables
+import os
+import chromadb
+
+# Set environment variables:
+# CHROMA_API_KEY=your-api-key
+# CHROMA_TENANT=your-tenant
+# CHROMA_DATABASE=your-database
+
+client = chromadb.CloudClient()
+```
+
+```python Explicit Configuration
+import chromadb
+
+client = chromadb.CloudClient(
+    tenant="my-tenant",
+    database="my-database",
+    api_key="your-api-key"
+)
+```
+</CodeGroup>
+
+<ParamField path="tenant" type="str" optional>
+  Tenant name, or None to infer from `CHROMA_TENANT` environment variable.
+</ParamField>
+
+<ParamField path="database" type="str" optional>
+  Database name, or None to infer from `CHROMA_DATABASE` environment variable.
+</ParamField>
+
+<ParamField path="api_key" type="str" optional>
+  API key for Chroma Cloud. If not provided, inferred from `CHROMA_API_KEY` environment variable.
+</ParamField>
+
+<ParamField path="settings" type="Settings" optional>
+  Optional settings to override defaults.
+</ParamField>
+
+<ResponseField name="return" type="ClientAPI">
+  A configured client instance for Chroma Cloud.
+</ResponseField>
+
+<ResponseField name="raises" type="ValueError">
+  If no API key is provided or available in the environment.
+</ResponseField>
+
+---
+
+### AsyncHttpClient()
+
+Create an async client that connects to a Chroma HTTP server.
+
+```python
+import chromadb
+import asyncio
+
+async def main():
+    client = await chromadb.AsyncHttpClient(
+        host="localhost",
+        port=8000
+    )
+    # Use client...
+    collections = await client.list_collections()
+
+asyncio.run(main())
+```
+
+<ParamField path="host" type="str" default="localhost">
+  Hostname of the Chroma server.
+</ParamField>
+
+<ParamField path="port" type="int" default="8000">
+  HTTP port of the Chroma server.
+</ParamField>
+
+<ParamField path="ssl" type="bool" default="false">
+  Whether to enable SSL for the connection.
+</ParamField>
+
+<ParamField path="headers" type="Dict[str, str]" optional>
+  Optional headers to send with each request.
+</ParamField>
+
+<ParamField path="settings" type="Settings" optional>
+  Optional settings to override defaults.
+</ParamField>
+
+<ParamField path="tenant" type="str" default="default_tenant">
+  Tenant name to use for requests.
+</ParamField>
+
+<ParamField path="database" type="str" default="default_database">
+  Database name to use for requests.
+</ParamField>
+
+<ResponseField name="return" type="AsyncClientAPI">
+  A configured async client instance.
+</ResponseField>
+
+---
+
+## Collection Management
+
+### create_collection()
+
+Create a new collection.
+
+<CodeGroup>
+```python Basic Usage
+collection = client.create_collection(name="my_collection")
+```
+
+```python With Metadata
+collection = client.create_collection(
+    name="my_collection",
+    metadata={"description": "My documents"}
+)
+```
+
+```python With Custom Embedding Function
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+embedding_fn = OpenAIEmbeddingFunction(api_key="your-key")
+
+collection = client.create_collection(
+    name="my_collection",
+    embedding_function=embedding_fn
+)
+```
+
+```python With Schema
+from chromadb import Schema, VectorIndexConfig, HnswIndexConfig
+
+schema = Schema()
+schema.create_index(
+    config=VectorIndexConfig(
+        space="cosine",
+        hnsw=HnswIndexConfig(ef_construction=200)
+    )
+)
+
+collection = client.create_collection(
+    name="my_collection",
+    schema=schema
+)
+```
+</CodeGroup>
+
+<ParamField path="name" type="str" required>
+  Collection name.
+</ParamField>
+
+<ParamField path="schema" type="Schema" optional>
+  Optional collection schema for indexes and encryption.
+</ParamField>
+
+<ParamField path="metadata" type="CollectionMetadata" optional>
+  Optional collection metadata.
+</ParamField>
+
+<ParamField path="embedding_function" type="EmbeddingFunction" optional>
+  Optional embedding function for the collection. Defaults to `DefaultEmbeddingFunction()`.
+</ParamField>
+
+<ParamField path="data_loader" type="DataLoader" optional>
+  Optional data loader for documents with URIs.
+</ParamField>
+
+<ParamField path="get_or_create" type="bool" default="false">
+  Whether to return an existing collection if present.
+</ParamField>
+
+<ResponseField name="return" type="Collection">
+  The created collection.
+</ResponseField>
+
+<ResponseField name="raises" type="ValueError">
+  If the collection already exists (when `get_or_create=False`) or if the embedding function conflicts with configuration.
+</ResponseField>
+
+---
+
+### get_collection()
+
+Get an existing collection by name.
+
+```python
+collection = client.get_collection(name="my_collection")
+```
+
+<ParamField path="name" type="str" required>
+  Collection name.
+</ParamField>
+
+<ParamField path="embedding_function" type="EmbeddingFunction" optional>
+  Optional embedding function for the collection. Defaults to `DefaultEmbeddingFunction()`.
+</ParamField>
+
+<ParamField path="data_loader" type="DataLoader" optional>
+  Optional data loader for documents with URIs.
+</ParamField>
+
+<ResponseField name="return" type="Collection">
+  The requested collection.
+</ResponseField>
+
+<ResponseField name="raises" type="ValueError">
+  If the collection does not exist or if the embedding function conflicts with configuration.
+</ResponseField>
+
+---
+
+### get_or_create_collection()
+
+Get an existing collection or create a new one.
+
+```python
+collection = client.get_or_create_collection(
+    name="my_collection",
+    metadata={"description": "My documents"}
+)
+```
+
+<ParamField path="name" type="str" required>
+  Collection name.
+</ParamField>
+
+<ParamField path="schema" type="Schema" optional>
+  Optional collection schema. Ignored if the collection already exists.
+</ParamField>
+
+<ParamField path="metadata" type="CollectionMetadata" optional>
+  Optional collection metadata. Ignored if the collection already exists.
+</ParamField>
+
+<ParamField path="embedding_function" type="EmbeddingFunction" optional>
+  Optional embedding function for the collection. Defaults to `DefaultEmbeddingFunction()`.
+</ParamField>
+
+<ParamField path="data_loader" type="DataLoader" optional>
+  Optional data loader for URI-backed data.
+</ParamField>
+
+<ResponseField name="return" type="Collection">
+  The existing or newly created collection.
+</ResponseField>
+
+<ResponseField name="raises" type="ValueError">
+  If the embedding function does not match the collection's embedding function.
+</ResponseField>
+
+<Note>
+  If the collection already exists, the `schema`, `metadata` arguments are ignored.
+</Note>
+
+---
+
+### list_collections()
+
+List all collections in the current database.
+
+<CodeGroup>
+```python Basic Usage
+collections = client.list_collections()
+for collection in collections:
+    print(collection.name)
+```
+
+```python With Pagination
+collections = client.list_collections(limit=10, offset=0)
+```
+</CodeGroup>
+
+<ParamField path="limit" type="int" optional>
+  Maximum number of collections to return.
+</ParamField>
+
+<ParamField path="offset" type="int" optional>
+  Number of collections to skip before returning.
+</ParamField>
+
+<ResponseField name="return" type="Sequence[Collection]">
+  Collection objects for the current tenant and database.
+</ResponseField>
+
+---
+
+### delete_collection()
+
+Delete a collection by name.
+
+```python
+client.delete_collection(name="my_collection")
+```
+
+<ParamField path="name" type="str" required>
+  Collection name to delete.
+</ParamField>
+
+<Warning>
+  This operation is irreversible. All data in the collection will be permanently deleted.
+</Warning>
+
+---
+
+## Client Utilities
+
+### heartbeat()
+
+Check if the server is running and return the server time.
+
+```python
+server_time = client.heartbeat()
+print(f"Server time: {server_time} nanoseconds since epoch")
+```
+
+<ResponseField name="return" type="int">
+  Server time in nanoseconds since epoch.
+</ResponseField>
+
+---
+
+### get_version()
+
+Get the Chroma server version.
+
+```python
+version = client.get_version()
+print(f"Chroma version: {version}")
+```
+
+<ResponseField name="return" type="str">
+  The Chroma version string.
+</ResponseField>
+
+---
+
+### close()
+
+Close the client and release all resources.
+
+```python
+client.close()
+```
+
+<Note>
+  This is particularly important for `PersistentClient` to avoid SQLite file locking issues. Use context managers (`with` statement) for automatic cleanup.
+</Note>
+
+---
+
+## Settings
+
+Configure Chroma behavior with `Settings`.
+
+```python
+from chromadb.config import Settings
+
+settings = Settings(
+    anonymized_telemetry=False,
+    allow_reset=True
+)
+
+client = chromadb.Client(settings=settings)
+```
+
+### Common Settings
+
+- `anonymized_telemetry` (bool): Enable/disable anonymized telemetry. Default: `True`
+- `allow_reset` (bool): Allow resetting the database. Default: `False`
+- `chroma_server_host` (str): Chroma server hostname
+- `chroma_server_http_port` (int): Chroma server HTTP port
+- `chroma_server_ssl_enabled` (bool): Enable SSL for server connections
+- `chroma_server_headers` (Dict[str, str]): Headers to send with requests
+- `persist_directory` (str): Directory for persistent storage
+- `is_persistent` (bool): Enable persistence
+
+<Tip>
+  Settings can also be configured via environment variables. See the [Configuration guide](/operations/configuration) for details.
+</Tip>

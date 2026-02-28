@@ -1,0 +1,626 @@
+---
+title: CLI Commands
+description: Complete reference for the Chroma CLI commands and options
+---
+
+The Chroma CLI provides a comprehensive set of commands for managing local Chroma servers, Chroma Cloud databases, collections, and more.
+
+## Installation
+
+```bash
+pip install chromadb
+```
+
+The CLI is bundled with the ChromaDB Python package and available as the `chroma` command.
+
+## Global Options
+
+```bash
+chroma --help     # Show help information
+chroma --version  # Show CLI version (current: 1.4.1)
+```
+
+## Commands Overview
+
+<CardGroup cols={2}>
+  <Card title="run" icon="play" href="#run">
+    Start a local Chroma server
+  </Card>
+  <Card title="db" icon="database" href="#db-database-management">
+    Manage Chroma Cloud databases
+  </Card>
+  <Card title="browse" icon="magnifying-glass" href="#browse">
+    Browse collections interactively
+  </Card>
+  <Card title="copy" icon="copy" href="#copy">
+    Copy collections between environments
+  </Card>
+  <Card title="login" icon="right-to-bracket" href="#login">
+    Log in to Chroma Cloud
+  </Card>
+  <Card title="profile" icon="user" href="#profile">
+    Manage Chroma Cloud profiles
+  </Card>
+  <Card title="vacuum" icon="broom" href="#vacuum">
+    Vacuum a local database
+  </Card>
+  <Card title="install" icon="download" href="#install">
+    Install sample applications
+  </Card>
+</CardGroup>
+
+---
+
+## run
+
+Start a local Chroma server.
+
+```bash
+chroma run [config_path] [options]
+```
+
+### Arguments
+
+- `config_path` - Path to a Chroma config file (optional)
+
+### Options
+
+<ParamField path="--path" type="string">
+  The persistence path to your Chroma DB. Cannot be used with `config_path`.
+</ParamField>
+
+<ParamField path="--host" type="string" default="localhost">
+  The host to listen to. Cannot be used with `config_path`.
+</ParamField>
+
+<ParamField path="--port" type="number">
+  The port to run the server on. Cannot be used with `config_path`.
+</ParamField>
+
+### Examples
+
+```bash
+# Run with default settings (localhost:8000)
+chroma run
+
+# Run on custom port
+chroma run --port 9000
+
+# Run with custom data path
+chroma run --path ./my-chroma-data
+
+# Run with config file
+chroma run /path/to/config.yaml
+
+# Run on all interfaces
+chroma run --host 0.0.0.0 --port 8000
+```
+
+### Output
+
+When the server starts successfully, you'll see:
+
+- Chroma logo
+- Data storage path
+- Server URL
+- Getting started guide link
+- Chroma Cloud signup information
+
+---
+
+## db (Database Management)
+
+Manage Chroma Cloud databases.
+
+```bash
+chroma db <subcommand> [options]
+```
+
+### Subcommands
+
+#### db create
+
+Create a new database in Chroma Cloud.
+
+```bash
+chroma db create [name] [options]
+```
+
+**Arguments:**
+- `name` - The name of the DB to create (optional, will prompt if not provided)
+
+**Options:**
+- `--dev` - Flag to use during development (hidden)
+
+**Examples:**
+```bash
+chroma db create my-database
+chroma db create  # Interactive prompt
+```
+
+#### db list
+
+List all available databases.
+
+```bash
+chroma db list [options]
+```
+
+**Options:**
+- `--dev` - Flag to use during development (hidden)
+
+**Examples:**
+```bash
+chroma db list
+```
+
+#### db connect
+
+Generate a connection snippet for a database.
+
+```bash
+chroma db connect [name] [options]
+```
+
+**Arguments:**
+- `name` - The name of the DB to connect to (optional, will prompt if not provided)
+
+**Options:**
+
+<ParamField path="--language" type="enum">
+  Programming language for the connection snippet. Options: `python`, `javascript`, `typescript`
+</ParamField>
+
+<ParamField path="--env-file" type="boolean">
+  Add Chroma environment variables to a `.env` file in the current directory. Cannot be used with `--language` or `--env-vars`.
+</ParamField>
+
+<ParamField path="--env-vars" type="boolean">
+  Output Chroma environment variables. Cannot be used with `--language` or `--env-file`.
+</ParamField>
+
+**Examples:**
+```bash
+# Get Python connection snippet
+chroma db connect my-database --language python
+
+# Get JavaScript snippet
+chroma db connect my-database --language javascript
+
+# Create .env file
+chroma db connect my-database --env-file
+
+# Output environment variables
+chroma db connect my-database --env-vars
+```
+
+#### db delete
+
+Delete a database.
+
+```bash
+chroma db delete [name] [options]
+```
+
+**Arguments:**
+- `name` - The name of the DB to delete (optional, will prompt if not provided)
+
+**Options:**
+- `--force` - Delete without confirmation (hidden)
+- `--dev` - Flag to use during development (hidden)
+
+**Examples:**
+```bash
+chroma db delete my-database
+chroma db delete my-database --force  # Skip confirmation
+```
+
+<Warning>
+Deleting a database is permanent and cannot be undone. All data in the database will be lost.
+</Warning>
+
+---
+
+## browse
+
+Browse Chroma collections with an interactive TUI (Terminal User Interface).
+
+```bash
+chroma browse <collection_name> [options]
+```
+
+### Arguments
+
+- `collection_name` - The name of the collection to browse (required)
+
+### Options
+
+<ParamField path="--db" type="string">
+  The Chroma Cloud DB name with your collection
+</ParamField>
+
+<ParamField path="--local" type="boolean">
+  Find this collection on a local Chroma server
+</ParamField>
+
+<ParamField path="--theme" type="enum">
+  Theme for the collection browser. Options: `Dark`, `Light`
+</ParamField>
+
+<ParamField path="--host" type="string">
+  The hostname for your local Chroma server. Cannot be used with `--path`.
+</ParamField>
+
+<ParamField path="--path" type="string">
+  The data path for your local Chroma server. Cannot be used with `--host`.
+</ParamField>
+
+### Examples
+
+```bash
+# Browse a cloud collection
+chroma browse my_collection --db my-database
+
+# Browse a local collection
+chroma browse my_collection --local
+
+# Browse with custom theme
+chroma browse my_collection --theme Light
+
+# Browse from custom host
+chroma browse my_collection --host http://localhost:9000
+
+# Browse from custom path
+chroma browse my_collection --path ./my-chroma-data
+```
+
+---
+
+## copy
+
+Copy collections between local and Chroma Cloud environments.
+
+```bash
+chroma copy [options]
+```
+
+### Options
+
+<ParamField path="--all" type="boolean">
+  Copy all collections. Cannot be used with `--collections`.
+</ParamField>
+
+<ParamField path="--collections" type="string[]">
+  The names of collections to copy. Can be specified multiple times.
+</ParamField>
+
+<ParamField path="--from-local" type="boolean">
+  Copy from a local Chroma server. Cannot be used with `--from-cloud` or `--to-local`.
+</ParamField>
+
+<ParamField path="--from-cloud" type="boolean">
+  Copy from Chroma Cloud. Cannot be used with `--to-cloud` or `--from-local`.
+</ParamField>
+
+<ParamField path="--to-local" type="boolean">
+  Copy to a local Chroma server. Cannot be used with `--to-cloud`.
+</ParamField>
+
+<ParamField path="--to-cloud" type="boolean">
+  Copy to Chroma Cloud.
+</ParamField>
+
+<ParamField path="--db" type="string">
+  Chroma Cloud DB with the collections to copy
+</ParamField>
+
+<ParamField path="--host" type="string">
+  Local Chroma server host. Cannot be used with `--path`.
+</ParamField>
+
+<ParamField path="--path" type="string">
+  Data path for your local Chroma server. Cannot be used with `--host`.
+</ParamField>
+
+<ParamField path="--batch" type="number" default="100">
+  Batch size for records when copying. Min: 1, Max: 300.
+</ParamField>
+
+<ParamField path="--concurrent" type="number" default="5">
+  Number of concurrent processes when copying. Min: 1, Max: 8.
+</ParamField>
+
+### Examples
+
+```bash
+# Copy all collections from local to cloud
+chroma copy --from-local --to-cloud --all --db my-database
+
+# Copy specific collections
+chroma copy --collections my_collection --collections another_collection --to-cloud --db my-database
+
+# Copy from cloud to local with custom batch size
+chroma copy --from-cloud --to-local --all --db my-database --batch 200
+
+# Copy with custom concurrency
+chroma copy --from-local --to-cloud --all --concurrent 8 --db my-database
+```
+
+<Note>
+The copy command performs a one-time copy operation. Collections must not already exist in the target environment.
+</Note>
+
+---
+
+## login
+
+Log in to Chroma Cloud.
+
+```bash
+chroma login [options]
+```
+
+### Options
+
+<ParamField path="--profile" type="string">
+  Profile name to associate with auth credentials
+</ParamField>
+
+<ParamField path="--api-key" type="string">
+  API key for headless authentication. When used with `--profile`, enables headless login.
+</ParamField>
+
+<ParamField path="--dev" type="boolean">
+  Flag to use during development (hidden)
+</ParamField>
+
+### Examples
+
+```bash
+# Interactive browser login
+chroma login
+
+# Login with custom profile name
+chroma login --profile my-team
+
+# Headless login (requires both --api-key and --profile)
+chroma login --api-key YOUR_API_KEY --profile my-profile
+```
+
+### Interactive Login Flow
+
+1. Opens your browser to Chroma Cloud
+2. Authenticate with your account
+3. Select team (if you belong to multiple)
+4. Credentials are saved to `~/.chroma/credentials`
+5. Profile is set as active
+
+---
+
+## profile
+
+Manage Chroma Cloud profiles.
+
+```bash
+chroma profile <subcommand> [options]
+```
+
+### Subcommands
+
+#### profile list
+
+List all available profiles.
+
+```bash
+chroma profile list
+```
+
+#### profile show
+
+Show the current active profile.
+
+```bash
+chroma profile show
+```
+
+#### profile use
+
+Set the active profile.
+
+```bash
+chroma profile use <name>
+```
+
+**Arguments:**
+- `name` - The name of the profile to use (required)
+
+**Examples:**
+```bash
+chroma profile use my-team
+```
+
+#### profile delete
+
+Delete a profile.
+
+```bash
+chroma profile delete <name> [options]
+```
+
+**Arguments:**
+- `name` - The name of the profile to delete (required)
+
+**Options:**
+- `--force` - Skip delete confirmation for the active profile
+
+**Examples:**
+```bash
+chroma profile delete old-profile
+chroma profile delete current-profile --force
+```
+
+#### profile rename
+
+Rename a profile.
+
+```bash
+chroma profile rename <name> <new_name>
+```
+
+**Arguments:**
+- `name` - The name of the profile to rename (required)
+- `new_name` - The new name for the profile (required)
+
+**Examples:**
+```bash
+chroma profile rename old-name new-name
+```
+
+---
+
+## vacuum
+
+Vacuum a local Chroma persistent directory to reclaim disk space.
+
+```bash
+chroma vacuum [options]
+```
+
+### Options
+
+<ParamField path="--path" type="string">
+  The path of your Chroma DB
+</ParamField>
+
+<ParamField path="--force" type="boolean" default="false">
+  Skip vacuum confirmation
+</ParamField>
+
+<ParamField path="--timeout" type="number">
+  Maximum time (in seconds) to wait for vacuum
+</ParamField>
+
+### Examples
+
+```bash
+# Vacuum default location
+chroma vacuum
+
+# Vacuum custom path
+chroma vacuum --path ./my-chroma-data
+
+# Force vacuum without confirmation
+chroma vacuum --force
+
+# Vacuum with timeout
+chroma vacuum --timeout 300
+```
+
+<Warning>
+Vacuum blocks both reads and writes to the database while running. We recommend shutting down the server before running this command.
+</Warning>
+
+<Note>
+If you upgraded from Chroma version below 0.5.6 to 0.5.6 or above, run vacuum once to greatly reduce database size and enable continuous database pruning.
+</Note>
+
+---
+
+## install
+
+Install sample applications from the Chroma repository.
+
+```bash
+chroma install [name] [options]
+```
+
+### Arguments
+
+- `name` - The name of the sample app to install (optional, will prompt if not provided)
+
+### Options
+
+<ParamField path="--list" type="boolean">
+  List all available sample apps. Cannot be used with `name` or `--local`.
+</ParamField>
+
+<ParamField path="--local" type="boolean">
+  Configure the app for local Chroma server
+</ParamField>
+
+<ParamField path="--db" type="string">
+  Database name to use (required for cloud mode)
+</ParamField>
+
+### Examples
+
+```bash
+# List available sample apps
+chroma install --list
+
+# Install a sample app
+chroma install my-sample-app
+
+# Install for local development
+chroma install my-sample-app --local
+
+# Install for cloud with database
+chroma install my-sample-app --db my-database
+```
+
+---
+
+## update
+
+Check for Chroma CLI updates.
+
+```bash
+chroma update
+```
+
+Checks if a newer version of the Chroma CLI is available and provides update instructions.
+
+---
+
+## docs
+
+Open the Chroma online documentation.
+
+```bash
+chroma docs
+```
+
+Opens [https://docs.trychroma.com](https://docs.trychroma.com) in your default browser.
+
+---
+
+## support
+
+Open the Chroma Discord community.
+
+```bash
+chroma support
+```
+
+Opens the Chroma Discord server in your default browser.
+
+---
+
+## Environment Variables
+
+The CLI respects several environment variables:
+
+- `CHROMA_API_KEY` - API key for Chroma Cloud
+- `CHROMA_TENANT` - Tenant ID
+- `CHROMA_DATABASE` - Database name
+- `POSTGRES_HOST` - PostgreSQL host (for Go backend development)
+- `POSTGRES_PORT` - PostgreSQL port (for Go backend development)
+
+## Configuration Files
+
+CLI configuration is stored in `~/.chroma/`:
+
+- `credentials` - Stored profile credentials
+- `config.json` - CLI configuration and preferences
+
+See [Configuration](/api/cli/configuration) for details.

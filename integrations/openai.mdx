@@ -1,0 +1,244 @@
+---
+title: OpenAI embeddings
+description: Use OpenAI's embedding models with Chroma for semantic search and retrieval
+---
+
+Chroma supports OpenAI's embedding models out of the box, allowing you to use state-of-the-art embeddings for your vector search applications.
+
+## Installation
+
+<CodeGroup>
+```bash Python
+pip install chromadb openai
+```
+
+```bash JavaScript
+npm install chromadb openai
+```
+</CodeGroup>
+
+## Python usage
+
+### Basic setup
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+import os
+
+# Set your API key
+os.environ["OPENAI_API_KEY"] = "your-api-key"
+
+# Create embedding function
+embedding_function = OpenAIEmbeddingFunction(
+    api_key=os.environ["OPENAI_API_KEY"],
+    model_name="text-embedding-3-small"
+)
+
+# Create client and collection
+client = chromadb.Client()
+collection = client.create_collection(
+    name="openai_embeddings",
+    embedding_function=embedding_function
+)
+
+# Add documents (embeddings generated automatically)
+collection.add(
+    documents=["This is a document", "This is another document"],
+    ids=["doc1", "doc2"]
+)
+
+# Query
+results = collection.query(
+    query_texts=["document query"],
+    n_results=2
+)
+```
+
+### Available models
+
+Chroma supports all OpenAI embedding models:
+
+<Tabs>
+  <Tab title="Latest models">
+    ```python
+    # text-embedding-3-small (recommended)
+    # Dimensions: 1536 (default), configurable down to 512
+    # Cost-effective for most use cases
+    embedding_function = OpenAIEmbeddingFunction(
+        model_name="text-embedding-3-small"
+    )
+
+    # text-embedding-3-large
+    # Dimensions: 3072 (default), configurable
+    # Highest quality embeddings
+    embedding_function = OpenAIEmbeddingFunction(
+        model_name="text-embedding-3-large"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Legacy models">
+    ```python
+    # text-embedding-ada-002
+    # Dimensions: 1536 (fixed)
+    # Previous generation model
+    embedding_function = OpenAIEmbeddingFunction(
+        model_name="text-embedding-ada-002"
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Custom dimensions
+
+```python
+# Use fewer dimensions for faster search and lower storage
+embedding_function = OpenAIEmbeddingFunction(
+    api_key=os.environ["OPENAI_API_KEY"],
+    model_name="text-embedding-3-small",
+    dimensions=512  # Reduce from default 1536
+)
+```
+
+### API configuration
+
+```python
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+embedding_function = OpenAIEmbeddingFunction(
+    api_key="your-api-key",
+    model_name="text-embedding-3-small",
+    api_base="https://api.openai.com/v1",  # Custom endpoint
+    api_type="openai",  # or "azure" for Azure OpenAI
+    api_version="2023-05-15",  # For Azure
+    deployment_id="your-deployment"  # For Azure
+)
+```
+
+## JavaScript usage
+
+```javascript
+import { ChromaClient } from "chromadb";
+import { OpenAIEmbeddingFunction } from "chromadb";
+
+const embedder = new OpenAIEmbeddingFunction({
+  openai_api_key: "your-api-key",
+  openai_model: "text-embedding-3-small"
+});
+
+const client = new ChromaClient();
+const collection = await client.createCollection({
+  name: "openai_collection",
+  embeddingFunction: embedder
+});
+
+// Add documents
+await collection.add({
+  ids: ["id1", "id2"],
+  documents: ["Document 1", "Document 2"]
+});
+
+// Query
+const results = await collection.query({
+  queryTexts: ["query text"],
+  nResults: 2
+});
+```
+
+## Configuration
+
+<ParamField path="api_key" type="string" required>
+  Your OpenAI API key
+</ParamField>
+
+<ParamField path="model_name" type="string" default="text-embedding-3-small">
+  OpenAI embedding model to use
+</ParamField>
+
+<ParamField path="dimensions" type="int">
+  Number of dimensions (text-embedding-3 models only)
+</ParamField>
+
+<ParamField path="api_base" type="string">
+  Custom API endpoint URL
+</ParamField>
+
+<ParamField path="organization_id" type="string">
+  OpenAI organization ID
+</ParamField>
+
+## Cost optimization
+
+<Tip>
+  **Reduce costs**: Use `text-embedding-3-small` with reduced dimensions (512 or 768) for most applications. This provides excellent quality at a fraction of the cost.
+</Tip>
+
+```python
+# Cost-effective configuration
+embedding_function = OpenAIEmbeddingFunction(
+    model_name="text-embedding-3-small",
+    dimensions=512  # 67% reduction in storage and search time
+)
+```
+
+## Azure OpenAI
+
+```python
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+# Azure OpenAI configuration
+embedding_function = OpenAIEmbeddingFunction(
+    api_key="your-azure-key",
+    api_base="https://your-resource.openai.azure.com/",
+    api_type="azure",
+    api_version="2023-05-15",
+    deployment_id="your-deployment-name",
+    model_name="text-embedding-3-small"
+)
+```
+
+## Error handling
+
+```python
+try:
+    collection.add(
+        documents=["document"],
+        ids=["id1"]
+    )
+except Exception as e:
+    if "rate_limit" in str(e).lower():
+        # Handle rate limit
+        time.sleep(1)
+        # Retry
+    elif "invalid_api_key" in str(e).lower():
+        # Handle authentication error
+        print("Invalid API key")
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Choose the right model" icon="sliders">
+    Use `text-embedding-3-small` for most use cases. Only use `text-embedding-3-large` if you need the highest quality.
+  </Card>
+  <Card title="Batch requests" icon="layer-group">
+    Process documents in batches to avoid rate limits and improve throughput.
+  </Card>
+  <Card title="Cache embeddings" icon="database">
+    Store embeddings to avoid re-computing them for the same content.
+  </Card>
+  <Card title="Monitor costs" icon="dollar-sign">
+    Track your API usage and consider using reduced dimensions to lower costs.
+  </Card>
+</CardGroup>
+
+## Resources
+
+- [OpenAI Embeddings Documentation](https://platform.openai.com/docs/guides/embeddings)
+- [OpenAI Pricing](https://openai.com/pricing)
+- [Model Comparison](https://platform.openai.com/docs/guides/embeddings/embedding-models)
+
+<Warning>
+Keep your OpenAI API key secure. Never commit it to version control. Use environment variables or secure key management.
+</Warning>

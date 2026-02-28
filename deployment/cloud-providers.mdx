@@ -1,0 +1,590 @@
+---
+title: Cloud Provider Deployments
+description: Deploy Chroma on AWS, GCP, and Azure using infrastructure as code
+---
+
+Chroma provides Infrastructure as Code (IaC) templates for deploying on major cloud providers. These templates create single-instance Chroma deployments using Docker.
+
+## AWS Deployment
+
+Deploy Chroma on AWS EC2 using CloudFormation.
+
+### Prerequisites
+
+- AWS account with appropriate permissions
+- AWS CLI configured
+- EC2 key pair (optional, for SSH access)
+
+### CloudFormation Template
+
+The AWS deployment uses a CloudFormation template located at `deployments/aws/chroma.cf.json`.
+
+**Template Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `InstanceType` | `t3.small` | EC2 instance type |
+| `ChromaVersion` | `1.5.2` | Chroma Docker image version |
+| `KeyName` | (empty) | EC2 key pair name for SSH access |
+| `ChromaOtelCollectionEndpoint` | (empty) | OpenTelemetry endpoint |
+| `ChromaOtelServiceName` | (empty) | Service name for tracing |
+| `ChromaOtelCollectionHeaders` | `{}` | OTEL headers |
+
+### Deploy with AWS Console
+
+1. **Navigate to CloudFormation**
+   - Go to AWS Console → CloudFormation → Create Stack
+
+2. **Upload Template**
+   - Upload `deployments/aws/chroma.cf.json`
+   - Or use Amazon S3 URL if hosted
+
+3. **Configure Parameters**
+   - Choose instance type (recommended: `t3.small` or larger)
+   - Set Chroma version
+   - Optionally add SSH key pair
+
+4. **Review and Create**
+   - Review settings
+   - Acknowledge IAM resource creation
+   - Click "Create Stack"
+
+5. **Get Instance IP**
+   - Wait for stack creation to complete
+   - Go to Outputs tab
+   - Copy `ServerIp` value
+
+### Deploy with AWS CLI
+
+```bash
+# Create stack
+aws cloudformation create-stack \
+  --stack-name chroma-server \
+  --template-body file://deployments/aws/chroma.cf.json \
+  --parameters \
+    ParameterKey=InstanceType,ParameterValue=t3.small \
+    ParameterKey=ChromaVersion,ParameterValue=1.5.2 \
+    ParameterKey=KeyName,ParameterValue=my-key-pair
+
+# Wait for completion
+aws cloudformation wait stack-create-complete \
+  --stack-name chroma-server
+
+# Get server IP
+aws cloudformation describe-stacks \
+  --stack-name chroma-server \
+  --query 'Stacks[0].Outputs[?OutputKey==`ServerIp`].OutputValue' \
+  --output text
+```
+
+### What Gets Deployed
+
+The CloudFormation template provisions:
+
+1. **EC2 Instance**
+   - Amazon Linux 2
+   - 24 GB EBS volume
+   - Docker and Docker Compose installed
+
+2. **Security Group**
+   - Port 22 (SSH) - open to 0.0.0.0/0
+   - Port 8000 (Chroma HTTP) - open to 0.0.0.0/0
+
+3. **User Data Script**
+   ```bash
+   #!/bin/bash
+   # Install Docker
+   amazon-linux-extras install docker -y
+   usermod -a -G docker ec2-user
+   
+   # Install Docker Compose
+   curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) \
+     -o /usr/local/bin/docker-compose
+   chmod +x /usr/local/bin/docker-compose
+   
+   # Start Docker
+   systemctl enable docker
+   systemctl start docker
+   
+   # Download docker-compose.yml
+   curl -o /home/ec2-user/docker-compose.yml \
+     https://s3.amazonaws.com/public.trychroma.com/cloudformation/assets/docker-compose.yml
+   
+   # Create .env file
+   echo 'CHROMA_OPEN_TELEMETRY__ENDPOINT=${ChromaOtelCollectionEndpoint}' >> /home/ec2-user/.env
+   echo 'CHROMA_OPEN_TELEMETRY__SERVICE_NAME=${ChromaOtelServiceName}' >> /home/ec2-user/.env
+   echo 'OTEL_EXPORTER_OTLP_HEADERS=${ChromaOtelCollectionHeaders}' >> /home/ec2-user/.env
+   
+   # Start Chroma
+   cd /home/ec2-user
+   sudo -u ec2-user docker-compose up -d
+   ```
+
+### Docker Compose Configuration
+
+The AWS deployment uses this Docker Compose file:
+
+```yaml
+version: '3.9'
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:${CHROMA_VERSION}
+    volumes:
+      - index_data:/index_data
+    ports:
+      - "8000:8000"
+    networks:
+      - net
+    env_file:
+      - .env
+
+volumes:
+  index_data:
+    driver: local
+  backups:
+    driver: local
+```
+
+### Connect to Chroma
+
+```python
+import chromadb
+
+# Replace with your instance's public IP
+client = chromadb.HttpClient(
+    host="<SERVER_IP>",
+    port=8000
+)
+
+# Verify connection
+print(client.heartbeat())
+```
+
+### Security Recommendations
+
+<Warning>
+  The default security group opens ports to 0.0.0.0/0. For production, restrict access to specific IP ranges.
+</Warning>
+
+**Update Security Group:**
+
+```bash
+# Get security group ID
+SG_ID=$(aws cloudformation describe-stack-resources \
+  --stack-name chroma-server \
+  --logical-resource-id ChromaInstanceSecurityGroup \
+  --query 'StackResources[0].PhysicalResourceId' \
+  --output text)
+
+# Remove public access
+aws ec2 revoke-security-group-ingress \
+  --group-id $SG_ID \
+  --ip-permissions IpProtocol=tcp,FromPort=8000,ToPort=8000,IpRanges='[{CidrIp=0.0.0.0/0}]'
+
+# Add restricted access
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_ID \
+  --protocol tcp \
+  --port 8000 \
+  --cidr <YOUR_IP>/32
+```
+
+### Monitoring
+
+```bash
+# SSH into instance
+ssh -i ~/.ssh/my-key-pair.pem ec2-user@<SERVER_IP>
+
+# Check Chroma status
+cd /home/ec2-user
+docker-compose ps
+docker-compose logs -f
+
+# Check health
+curl http://localhost:8000/api/v2/heartbeat
+```
+
+## GCP Deployment
+
+Deploy Chroma on Google Compute Engine using Terraform.
+
+### Prerequisites
+
+- GCP project with billing enabled
+- `gcloud` CLI installed and configured
+- Terraform installed
+
+### Terraform Configuration
+
+The GCP deployment uses Terraform files in `deployments/gcp/`.
+
+**Variables (`chroma.tfvars`):**
+
+```hcl
+project_id = "your-gcp-project"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+instance_name = "chroma-instance"
+machine_type  = "e2-small"
+
+chroma_version = "1.5.2"
+
+# Optional: Authentication
+chroma_server_auth_credentials = ""
+chroma_server_auth_provider    = ""
+
+# Optional: Observability
+chroma_otel_collection_endpoint = ""
+chroma_otel_service_name        = "chromadb"
+chroma_otel_collection_headers  = "{}"
+```
+
+### Deploy with Terraform
+
+```bash
+# Navigate to GCP deployment directory
+cd deployments/gcp
+
+# Initialize Terraform
+terraform init
+
+# Review planned changes
+terraform plan -var-file=chroma.tfvars
+
+# Apply configuration
+terraform apply -var-file=chroma.tfvars
+
+# Get instance IP
+terraform output chroma_instance_ip
+```
+
+### Terraform Resources
+
+The `main.tf` creates:
+
+1. **Firewall Rule**
+   ```hcl
+   resource "google_compute_firewall" "default" {
+     name    = "chroma-allow-ssh-http"
+     network = "default"
+     
+     allow {
+       protocol = "tcp"
+       ports    = ["22", "8000"]
+     }
+     
+     source_ranges = ["0.0.0.0/0"]
+   }
+   ```
+
+2. **Compute Instance**
+   ```hcl
+   resource "google_compute_instance" "chroma_instance" {
+     name         = var.instance_name
+     machine_type = var.machine_type
+     zone         = var.zone
+     
+     boot_disk {
+       initialize_params {
+         image = "debian-cloud/debian-11"
+         size  = 24
+       }
+     }
+     
+     network_interface {
+       network = "default"
+       access_config {}
+     }
+     
+     metadata_startup_script = <<-EOT
+       #!/bin/bash
+       # Install Docker and start Chroma
+       ...
+     EOT
+   }
+   ```
+
+### Connect to Instance
+
+```bash
+# SSH using gcloud
+gcloud compute ssh chroma-instance --zone=us-central1-a
+
+# Or use standard SSH
+ssh chroma@<INSTANCE_IP>
+```
+
+### Machine Type Recommendations
+
+| Workload | Machine Type | vCPUs | Memory |
+|----------|--------------|-------|--------|
+| Development | `e2-small` | 2 | 2 GB |
+| Small Production | `e2-medium` | 2 | 4 GB |
+| Medium Production | `e2-standard-4` | 4 | 16 GB |
+| Large Production | `n2-standard-8` | 8 | 32 GB |
+
+### Cleanup
+
+```bash
+# Destroy all resources
+terraform destroy -var-file=chroma.tfvars
+```
+
+## Azure Deployment
+
+Deploy Chroma on Azure Virtual Machines using Terraform.
+
+### Prerequisites
+
+- Azure subscription
+- Azure CLI installed and configured
+- Terraform installed
+- SSH key pair
+
+### Terraform Configuration
+
+**Variables (`chroma.tfvars.tf`):**
+
+```hcl
+resource_group_name = "chroma-resources"
+location            = "East US"
+
+instance_name = "chroma-instance"
+machine_type  = "Standard_B2s"
+
+chroma_version = "1.5.2"
+
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Optional: Authentication
+chroma_server_auth_credentials = ""
+chroma_server_auth_provider    = ""
+
+# Optional: Observability
+chroma_otel_collection_endpoint = ""
+chroma_otel_service_name        = "chromadb"
+chroma_otel_collection_headers  = "{}"
+```
+
+### Deploy with Terraform
+
+```bash
+# Navigate to Azure deployment directory
+cd deployments/azure
+
+# Login to Azure
+az login
+
+# Initialize Terraform
+terraform init
+
+# Review planned changes
+terraform plan -var-file=chroma.tfvars.tf
+
+# Apply configuration
+terraform apply -var-file=chroma.tfvars.tf
+
+# Get instance IP
+terraform output public_ip_address
+```
+
+### Azure Resources
+
+The `main.tf` creates:
+
+1. **Resource Group**
+2. **Virtual Network** (10.0.0.0/16)
+3. **Subnet** (10.0.1.0/24)
+4. **Network Security Group**
+   - Port 22: SSH
+   - Port 8000: Chroma HTTP
+5. **Public IP Address**
+6. **Network Interface**
+7. **Linux Virtual Machine**
+   - Debian 11
+   - 24 GB OS disk
+   - Docker and Chroma auto-installed
+
+### Network Security Group
+
+```hcl
+resource "azurerm_network_security_group" "nsg" {
+  security_rule {
+    name                       = "AllowSSH"
+    priority                   = 1001
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+  
+  security_rule {
+    name                       = "AllowHTTP"
+    priority                   = 1002
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8000"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+```
+
+### Connect to Instance
+
+```bash
+# SSH using the configured key
+ssh azureuser@<PUBLIC_IP>
+
+# Check Chroma status
+cd /home/chroma
+sudo docker-compose ps
+```
+
+### VM Size Recommendations
+
+| Workload | VM Size | vCPUs | Memory |
+|----------|---------|-------|--------|
+| Development | `Standard_B2s` | 2 | 4 GB |
+| Small Production | `Standard_B2ms` | 2 | 8 GB |
+| Medium Production | `Standard_D4s_v3` | 4 | 16 GB |
+| Large Production | `Standard_D8s_v3` | 8 | 32 GB |
+
+### Cleanup
+
+```bash
+# Destroy all resources
+terraform destroy -var-file=chroma.tfvars.tf
+```
+
+## Common Configuration
+
+### Environment Variables
+
+All cloud deployments support these environment variables:
+
+```bash
+# Observability
+CHROMA_OPEN_TELEMETRY__ENDPOINT=http://your-otel-collector:4317
+CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chromadb
+OTEL_EXPORTER_OTLP_HEADERS={"x-api-key":"your-key"}
+
+# Authentication
+CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.basic_authn.BasicAuthenticationServerProvider
+CHROMA_SERVER_AUTHN_CREDENTIALS=admin:password
+```
+
+### Persistent Storage
+
+All deployments use Docker volumes for persistence:
+
+```yaml
+volumes:
+  - index_data:/index_data
+  - backups:/backups
+```
+
+### Backup and Restore
+
+```bash
+# SSH into instance
+ssh user@<INSTANCE_IP>
+
+# Backup
+cd /home/chroma  # or /home/ec2-user for AWS
+docker-compose exec server tar czf /backup.tar.gz /index_data
+docker cp <container_id>:/backup.tar.gz ./backup.tar.gz
+
+# Restore
+docker cp ./backup.tar.gz <container_id>:/backup.tar.gz
+docker-compose exec server tar xzf /backup.tar.gz -C /
+```
+
+## Production Considerations
+
+### High Availability
+
+For production HA deployments:
+
+1. **Use Kubernetes** instead of single-instance deployments
+2. **Deploy across multiple availability zones**
+3. **Set up load balancing**
+4. **Configure auto-scaling**
+
+See [Kubernetes Deployment](/deployment/kubernetes) for distributed architectures.
+
+### Monitoring
+
+Configure OpenTelemetry for comprehensive observability:
+
+```hcl
+# Terraform variable
+chroma_otel_collection_endpoint = "http://your-otel-collector:4317"
+chroma_otel_service_name        = "chromadb-production"
+chroma_otel_collection_headers  = jsonencode({
+  "x-api-key" = "your-api-key"
+})
+```
+
+### Security
+
+1. **Restrict network access**
+   - Modify security groups/firewall rules
+   - Use VPN or VPC peering
+   - Implement authentication
+
+2. **Enable SSL/TLS**
+   - Use reverse proxy (nginx, HAProxy)
+   - Configure SSL certificates
+
+3. **Regular updates**
+   ```bash
+   # Update Chroma version
+   docker-compose pull
+   docker-compose up -d
+   ```
+
+### Cost Optimization
+
+- **AWS**: Use Spot Instances for non-critical workloads
+- **GCP**: Use Preemptible VMs for development
+- **Azure**: Use Reserved Instances for long-term production
+- Monitor and adjust instance sizes based on usage
+
+## Comparison
+
+| Feature | AWS | GCP | Azure |
+|---------|-----|-----|-------|
+| **Deployment** | CloudFormation | Terraform | Terraform |
+| **OS** | Amazon Linux 2 | Debian 11 | Debian 11 |
+| **Default Instance** | t3.small | e2-small | Standard_B2s |
+| **Min Cost/Month** | ~$15 | ~$13 | ~$14 |
+| **SSH Access** | Optional | Standard | Standard |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Learn about Docker configuration options
+  </Card>
+  <Card title="Kubernetes" icon="kubernetes" href="/deployment/kubernetes">
+    Scale to distributed Kubernetes deployment
+  </Card>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Secure your Chroma deployment
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/operations/observability">
+    Monitor your cloud deployment
+  </Card>
+</CardGroup>

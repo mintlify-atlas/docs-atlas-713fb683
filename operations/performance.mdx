@@ -1,0 +1,625 @@
+---
+title: Performance Tuning
+description: Optimize Chroma for speed, throughput, and resource efficiency
+---
+
+## Overview
+
+Chroma provides multiple configuration options to optimize performance for your specific workload. This guide covers index configuration, query optimization, batch operations, and best practices for high-performance deployments.
+
+## Index Configuration
+
+Chroma supports multiple index types, each with configurable parameters. Proper index configuration is critical for query performance.
+
+### HNSW Vector Index
+
+Hierarchical Navigable Small World (HNSW) is the default vector index algorithm, providing excellent query performance with configurable accuracy/speed tradeoffs.
+
+#### HNSW Configuration
+
+```python
+import chromadb
+from chromadb.api.types import HnswIndexConfig, VectorIndexConfig
+
+client = chromadb.Client()
+collection = client.create_collection(
+    name="my_collection",
+    metadata={
+        "hnsw:space": "cosine",
+        "hnsw:construction_ef": 200,
+        "hnsw:M": 16,
+        "hnsw:search_ef": 100,
+        "hnsw:num_threads": 4,
+        "hnsw:batch_size": 100,
+        "hnsw:sync_threshold": 1000,
+        "hnsw:resize_factor": 1.2
+    }
+)
+```
+
+Or using the new schema API:
+
+```python
+from chromadb.api.types import (
+    HnswIndexConfig,
+    VectorIndexConfig,
+    Schema
+)
+from chromadb.execution.expression.operator import Key
+
+collection = client.create_collection(
+    name="my_collection",
+    schema=Schema(
+        vector_indexes=[
+            VectorIndexConfig(
+                space="cosine",
+                hnsw=HnswIndexConfig(
+                    ef_construction=200,
+                    max_neighbors=16,
+                    ef_search=100,
+                    num_threads=4,
+                    batch_size=100,
+                    sync_threshold=1000,
+                    resize_factor=1.2
+                )
+            )
+        ]
+    )
+)
+```
+
+#### HNSW Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `ef_construction` | `int` | `100` | Controls index build quality. Higher = better accuracy but slower build |
+| `max_neighbors` | `int` | `16` | Max connections per layer (M). Higher = better accuracy but more memory |
+| `ef_search` | `int` | `10` | Search beam width. Higher = better recall but slower queries |
+| `num_threads` | `int` | `1` | Number of threads for index operations |
+| `batch_size` | `int` | `100` | Batch size for index construction |
+| `sync_threshold` | `int` | `1000` | Number of elements before syncing index to disk |
+| `resize_factor` | `float` | `1.2` | Factor by which to grow index capacity |
+
+#### HNSW Tuning Guidelines
+
+**For high accuracy (recall > 0.95):**
+```python
+HnswIndexConfig(
+    ef_construction=400,
+    max_neighbors=32,
+    ef_search=200
+)
+```
+
+**For balanced performance:**
+```python
+HnswIndexConfig(
+    ef_construction=200,
+    max_neighbors=16,
+    ef_search=100
+)
+```
+
+**For fast queries (lower accuracy acceptable):**
+```python
+HnswIndexConfig(
+    ef_construction=100,
+    max_neighbors=8,
+    ef_search=50
+)
+```
+
+**For large-scale ingestion:**
+```python
+HnswIndexConfig(
+    ef_construction=200,
+    max_neighbors=16,
+    num_threads=8,
+    batch_size=500,
+    sync_threshold=5000
+)
+```
+
+### SPANN Vector Index
+
+SPace Partition and Nearest Neighbor search (SPANN) is designed for billion-scale vector search with disk-based storage.
+
+#### SPANN Configuration
+
+```python
+from chromadb.api.types import SpannIndexConfig, VectorIndexConfig
+
+collection = client.create_collection(
+    name="large_collection",
+    schema=Schema(
+        vector_indexes=[
+            VectorIndexConfig(
+                space="l2",
+                spann=SpannIndexConfig(
+                    search_nprobe=10,
+                    write_nprobe=5,
+                    ef_construction=200,
+                    ef_search=100,
+                    max_neighbors=16,
+                    split_threshold=10000,
+                    merge_threshold=1000
+                )
+            )
+        ]
+    )
+)
+```
+
+#### SPANN Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `search_nprobe` | `int` | `10` | Number of clusters to probe during search |
+| `write_nprobe` | `int` | `5` | Number of clusters to probe during writes |
+| `ef_construction` | `int` | `200` | Construction parameter for HNSW sub-indices |
+| `ef_search` | `int` | `100` | Search parameter for HNSW sub-indices |
+| `max_neighbors` | `int` | `16` | Max neighbors in HNSW sub-indices |
+| `split_threshold` | `int` | `10000` | Cluster size triggering a split |
+| `merge_threshold` | `int` | `1000` | Cluster size triggering a merge |
+| `reassign_neighbor_count` | `int` | `100` | Neighbors to consider for reassignment |
+
+#### When to Use SPANN
+
+Use SPANN when:
+- Dataset size > 10M vectors
+- Memory is limited relative to dataset size
+- Disk I/O bandwidth is sufficient
+- Acceptable trade-off: slightly lower recall for massive scale
+
+### Distance Metrics (Space)
+
+Choose the appropriate distance metric for your embeddings:
+
+```python
+from chromadb.api.types import Space
+
+# Cosine similarity (normalized dot product)
+collection = client.create_collection(
+    name="cosine_collection",
+    metadata={"hnsw:space": "cosine"}
+)
+
+# Euclidean distance (L2)
+collection = client.create_collection(
+    name="l2_collection",
+    metadata={"hnsw:space": "l2"}
+)
+
+# Inner product (dot product)
+collection = client.create_collection(
+    name="ip_collection",
+    metadata={"hnsw:space": "ip"}
+)
+```
+
+**Guidelines:**
+- **Cosine** - Best for normalized embeddings (most embedding models)
+- **L2** - Best for absolute distance measurements
+- **Inner Product** - Best when embeddings have meaningful magnitudes
+
+### Full-Text Search Index
+
+Optimize full-text search for document queries:
+
+```python
+from chromadb.api.types import FtsIndexConfig, Schema
+
+collection = client.create_collection(
+    name="docs_collection",
+    schema=Schema(
+        fts_indexes=[FtsIndexConfig()]
+    )
+)
+```
+
+FTS is automatically enabled on the `#document` field and supports efficient text search with BM25 ranking.
+
+### Metadata Inverted Indexes
+
+Chroma automatically creates inverted indexes for metadata fields:
+
+```python
+from chromadb.api.types import (
+    StringInvertedIndexConfig,
+    IntInvertedIndexConfig,
+    FloatInvertedIndexConfig,
+    BoolInvertedIndexConfig,
+    Schema
+)
+
+collection = client.create_collection(
+    name="metadata_collection",
+    schema=Schema(
+        string_inverted_indexes=[StringInvertedIndexConfig()],
+        int_inverted_indexes=[IntInvertedIndexConfig()],
+        float_inverted_indexes=[FloatInvertedIndexConfig()],
+        bool_inverted_indexes=[BoolInvertedIndexConfig()]
+    )
+)
+```
+
+These indexes enable fast filtering with `where` clauses.
+
+## Query Optimization
+
+### Limiting Results
+
+Always limit results to what you need:
+
+```python
+# Good - only fetch what you need
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=10
+)
+
+# Avoid - fetching unnecessary results
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=1000  # Too many if you only need 10
+)
+```
+
+### Selective Field Inclusion
+
+Only include fields you need:
+
+```python
+# Good - only fetch IDs and distances
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=10,
+    include=["distances"]
+)
+
+# Avoid - fetching all fields when not needed
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=10,
+    include=["documents", "metadatas", "embeddings", "distances"]
+)
+```
+
+### Efficient Filtering
+
+Structure `where` clauses for optimal performance:
+
+```python
+# Good - simple equality check
+results = collection.query(
+    query_embeddings=query_embedding,
+    where={"category": "science"},
+    n_results=10
+)
+
+# Good - combined with $and
+results = collection.query(
+    query_embeddings=query_embedding,
+    where={
+        "$and": [
+            {"category": "science"},
+            {"year": {"$gte": 2020}}
+        ]
+    },
+    n_results=10
+)
+
+# Slower - complex nested conditions
+results = collection.query(
+    query_embeddings=query_embedding,
+    where={
+        "$or": [
+            {"category": "science"},
+            {"$and": [
+                {"category": "tech"},
+                {"year": {"$lt": 2020}}
+            ]}
+        ]
+    },
+    n_results=10
+)
+```
+
+### Read Level Control
+
+Control consistency vs. performance tradeoff:
+
+```python
+from chromadb.api.types import ReadLevel
+
+# Default - reads from both index and WAL (most consistent)
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=10
+)
+
+# Faster - skip WAL, read only from compacted index
+# Recent writes may not be visible
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=10,
+    read_level=ReadLevel.INDEX_ONLY
+)
+```
+
+Use `INDEX_ONLY` when:
+- Query latency is critical
+- Eventual consistency is acceptable
+- Workload is read-heavy with infrequent writes
+
+## Batch Operations
+
+### Batch Inserts
+
+Always batch inserts for better performance:
+
+```python
+# Good - batch insert
+collection.add(
+    ids=[f"id{i}" for i in range(1000)],
+    documents=[f"document {i}" for i in range(1000)],
+    metadatas=[{"index": i} for i in range(1000)]
+)
+
+# Avoid - individual inserts
+for i in range(1000):
+    collection.add(
+        ids=[f"id{i}"],
+        documents=[f"document {i}"],
+        metadatas=[{"index": i}]
+    )
+```
+
+### Optimal Batch Size
+
+Balance throughput vs. memory:
+
+```python
+import numpy as np
+
+def chunked_add(collection, ids, embeddings, documents, metadatas, batch_size=1000):
+    """Add items in optimal batches"""
+    for i in range(0, len(ids), batch_size):
+        collection.add(
+            ids=ids[i:i+batch_size],
+            embeddings=embeddings[i:i+batch_size],
+            documents=documents[i:i+batch_size],
+            metadatas=metadatas[i:i+batch_size]
+        )
+
+# Recommended batch sizes:
+# - Small embeddings (< 384 dims): 1000-5000
+# - Medium embeddings (384-1536 dims): 500-1000  
+# - Large embeddings (> 1536 dims): 100-500
+```
+
+### Batch Queries
+
+Query multiple vectors in a single call:
+
+```python
+# Good - batch query
+query_embeddings = [emb1, emb2, emb3, emb4, emb5]
+results = collection.query(
+    query_embeddings=query_embeddings,
+    n_results=10
+)
+
+# Avoid - individual queries
+for query_embedding in query_embeddings:
+    result = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=10
+    )
+```
+
+## Memory Management
+
+### Memory Limits
+
+Set memory limits to prevent OOM:
+
+```python
+from chromadb.config import Settings
+
+client = chromadb.Client(Settings(
+    chroma_memory_limit_bytes=2 * 1024 * 1024 * 1024,  # 2GB
+    chroma_segment_cache_policy="LRU"
+))
+```
+
+### LRU Cache Configuration
+
+Enable LRU caching for segment data:
+
+```python
+client = chromadb.Client(Settings(
+    chroma_memory_limit_bytes=4 * 1024 * 1024 * 1024,  # 4GB
+    chroma_segment_cache_policy="LRU",
+    is_persistent=True,
+    persist_directory="./chroma_data"
+))
+```
+
+LRU cache evicts least recently used segments when memory limit is reached.
+
+### Resource Limits
+
+Increase file descriptor limits for high concurrency:
+
+```python
+client = chromadb.Client(Settings(
+    chroma_server_nofile=65536  # Unix only
+))
+```
+
+Or set system-wide:
+
+```bash
+# /etc/security/limits.conf
+* soft nofile 65536
+* hard nofile 65536
+```
+
+## Connection Pooling
+
+Configure HTTP connection pooling for remote clients:
+
+```python
+from chromadb.config import Settings
+
+client = chromadb.HttpClient(
+    host="chroma.example.com",
+    port=8000,
+    settings=Settings(
+        chroma_http_keepalive_secs=60.0,
+        chroma_http_max_connections=100,
+        chroma_http_max_keepalive_connections=20
+    )
+)
+```
+
+## Parallel Query Execution
+
+Leverage multiple threads for queries:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+import numpy as np
+
+def parallel_query(collection, query_embeddings, n_results=10, max_workers=4):
+    """Execute queries in parallel"""
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(
+                collection.query,
+                query_embeddings=[emb],
+                n_results=n_results
+            )
+            for emb in query_embeddings
+        ]
+        return [f.result() for f in futures]
+
+query_embeddings = [np.random.rand(384) for _ in range(100)]
+results = parallel_query(collection, query_embeddings, max_workers=8)
+```
+
+## Server-Side Configuration
+
+### Thread Pool Size
+
+Increase for high concurrency:
+
+```bash
+export CHROMA_SERVER_THREAD_POOL_SIZE=80
+```
+
+### gRPC Timeouts
+
+Adjust for your workload:
+
+```bash
+export CHROMA_QUERY_REQUEST_TIMEOUT_SECONDS=120
+export CHROMA_SYSDB_REQUEST_TIMEOUT_SECONDS=10
+export CHROMA_LOGSERVICE_REQUEST_TIMEOUT_SECONDS=10
+```
+
+## Performance Best Practices
+
+### Ingestion
+
+1. **Batch inserts** - Use batches of 500-5000 depending on embedding size
+2. **Pre-compute embeddings** - Generate embeddings before inserting
+3. **Use multiple threads** - Parallelize embedding generation
+4. **Tune HNSW construction** - Lower `ef_construction` for faster builds
+5. **Increase `sync_threshold`** - Reduce disk writes during bulk inserts
+
+### Querying
+
+1. **Limit results** - Only request what you need
+2. **Use appropriate `ef_search`** - Balance recall vs. speed
+3. **Enable `INDEX_ONLY`** - For read-heavy workloads
+4. **Batch queries** - Query multiple vectors at once
+5. **Filter efficiently** - Use simple `where` clauses when possible
+6. **Cache results** - Cache frequent queries at application level
+
+### Memory
+
+1. **Set memory limits** - Prevent OOM with `chroma_memory_limit_bytes`
+2. **Enable LRU cache** - For datasets larger than RAM
+3. **Monitor memory usage** - Track with observability tools
+4. **Use persistent storage** - Don't rely on in-memory for large datasets
+
+### Scaling
+
+1. **Horizontal scaling** - Use distributed Chroma for massive scale
+2. **Read replicas** - Separate read and write workloads
+3. **Partition collections** - Split large collections by tenant or category
+4. **Monitor query latency** - Track p50, p95, p99 percentiles
+
+## Benchmarking
+
+Measure your specific workload:
+
+```python
+import time
+import numpy as np
+
+def benchmark_queries(collection, query_embeddings, n_results=10, iterations=100):
+    """Benchmark query performance"""
+    latencies = []
+    
+    for _ in range(iterations):
+        start = time.time()
+        collection.query(
+            query_embeddings=query_embeddings,
+            n_results=n_results
+        )
+        latencies.append(time.time() - start)
+    
+    latencies = np.array(latencies)
+    print(f"Mean: {latencies.mean():.4f}s")
+    print(f"P50: {np.percentile(latencies, 50):.4f}s")
+    print(f"P95: {np.percentile(latencies, 95):.4f}s")
+    print(f"P99: {np.percentile(latencies, 99):.4f}s")
+
+query_embeddings = [np.random.rand(384) for _ in range(10)]
+benchmark_queries(collection, query_embeddings)
+```
+
+## Troubleshooting Performance
+
+### Slow Queries
+
+1. Check `ef_search` - may be too high
+2. Verify index is built - check collection count
+3. Review `where` clause complexity
+4. Monitor memory pressure - may be swapping
+5. Check network latency - for remote clients
+
+### Slow Ingestion
+
+1. Increase batch size
+2. Lower `ef_construction`
+3. Increase `num_threads`
+4. Increase `sync_threshold`
+5. Pre-generate embeddings
+
+### High Memory Usage
+
+1. Set `chroma_memory_limit_bytes`
+2. Enable LRU cache policy
+3. Reduce batch sizes
+4. Use persistent storage
+5. Check for memory leaks in custom embedding functions
+
+## Next Steps
+
+- Configure [Observability](/operations/observability) to monitor performance
+- Review [Configuration](/operations/configuration) options
+- Learn about [Migrations](/operations/migrations)

@@ -1,0 +1,633 @@
+---
+title: Search API
+description: Advanced hybrid search with filtering, ranking, and aggregation
+---
+
+The Search API provides a powerful query interface for hybrid search, combining vector similarity with metadata filtering, custom ranking, and result aggregation.
+
+<Warning>
+  This is an experimental API currently available for distributed and hosted Chroma only.
+</Warning>
+
+## Overview
+
+The Search API uses a builder pattern to construct complex queries:
+
+```python
+from chromadb.execution.expression import Search, K, Knn
+
+results = collection.search(
+    Search()
+        .where(K("category") == "science")
+        .rank(Knn(query=[0.1, 0.2, 0.3]))
+        .limit(10)
+        .select(K.DOCUMENT, K.SCORE)
+)
+```
+
+## Search Class
+
+### Search()
+
+Construct a search query with optional filtering, ranking, grouping, and projection.
+
+<CodeGroup>
+```python Builder Pattern
+from chromadb.execution.expression import Search, K, Knn, Val
+
+search = (Search()
+    .where((K("status") == "active") & (K("score") > 0.5))
+    .rank(Knn(query=[0.1, 0.2, 0.3]) * 0.8 + Val(0.5) * 0.2)
+    .limit(10, offset=0)
+    .select(K.DOCUMENT, K.SCORE, "title"))
+
+results = collection.search(search)
+```
+
+```python Direct Construction
+from chromadb.execution.expression import Search
+
+search = Search(
+    where={"status": "active"},
+    rank={"$knn": {"query": [0.1, 0.2, 0.3]}},
+    limit=10,
+    select=["#document", "#score"]
+)
+
+results = collection.search(search)
+```
+
+```python Batch Search
+from chromadb.execution.expression import Search, K, Knn
+
+searches = [
+    Search().where(K("type") == "article").rank(Knn(query=[0.1, 0.2])),
+    Search().where(K("type") == "paper").rank(Knn(query=[0.3, 0.4]))
+]
+
+results = collection.search(searches)
+```
+</CodeGroup>
+
+<ParamField path="where" type="Where | Dict" optional>
+  Where expression or dict for filtering results. See [Where Expressions](#where-expressions).
+</ParamField>
+
+<ParamField path="rank" type="Rank | Dict" optional>
+  Rank expression or dict for scoring results. See [Rank Expressions](#rank-expressions).
+</ParamField>
+
+<ParamField path="group_by" type="GroupBy | Dict" optional>
+  GroupBy configuration for result aggregation. See [GroupBy](#groupby).
+</ParamField>
+
+<ParamField path="limit" type="Limit | Dict | int" optional>
+  Limit configuration for pagination. Can be:
+  - `Limit(limit=10, offset=0)`
+  - `{"limit": 10, "offset": 0}`
+  - `10` (shorthand for limit with offset=0)
+</ParamField>
+
+<ParamField path="select" type="Select | Dict | List[str]" optional>
+  Select configuration for returned fields. Can be:
+  - `Select(keys={K.DOCUMENT, K.SCORE})`
+  - `{"keys": ["#document", "#score"]}`
+  - `["#document", "#score"]` (shorthand)
+</ParamField>
+
+### Builder Methods
+
+#### where()
+
+Set the where clause for filtering.
+
+```python
+search = Search().where((K("category") == "science") & (K("score") > 0.5))
+```
+
+#### rank()
+
+Set the ranking expression for scoring.
+
+```python
+search = Search().rank(Knn(query=[0.1, 0.2, 0.3]) * 0.8 + Val(0.5) * 0.2)
+```
+
+#### limit()
+
+Set pagination parameters.
+
+```python
+search = Search().limit(20, offset=10)
+```
+
+#### select()
+
+Select specific fields to return.
+
+```python
+search = Search().select(K.DOCUMENT, K.SCORE, "title", "author")
+```
+
+#### group_by()
+
+Group and aggregate results.
+
+```python
+from chromadb.execution.expression import GroupBy, MinK
+
+search = Search().group_by(
+    GroupBy(
+        keys=[K("category")],
+        aggregate=MinK(keys=[K.SCORE], k=3)
+    )
+)
+```
+
+---
+
+## Key (K)
+
+Field reference for building expressions. `K` is an alias for `Key`.
+
+### Predefined Keys
+
+```python
+from chromadb.execution.expression import K
+
+# Special system fields (with # prefix)
+K.ID          # "#id" - Record ID
+K.DOCUMENT    # "#document" - Document content
+K.EMBEDDING   # "#embedding" - Embedding vector
+K.METADATA    # "#metadata" - Full metadata object
+K.SCORE       # "#score" - Ranking score
+
+# Custom metadata fields (without # prefix)
+K("category")    # Metadata field "category"
+K("author")      # Metadata field "author"
+K("year")        # Metadata field "year"
+```
+
+<Note>
+  Keys starting with `#` are reserved for system use. Custom metadata fields should not use the `#` prefix.
+</Note>
+
+### Comparison Operators
+
+```python
+# Equality
+K("status") == "active"
+
+# Inequality
+K("status") != "draft"
+
+# Comparisons
+K("year") > 2020
+K("score") >= 0.5
+K("priority") < 10
+K("rating") <= 5.0
+```
+
+### Set Operators
+
+```python
+# In list
+K("category").is_in(["science", "tech", "ai"])
+
+# Not in list
+K("status").not_in(["deleted", "archived"])
+```
+
+### String Operators
+
+```python
+# Contains substring (for documents)
+K.DOCUMENT.contains("machine learning")
+
+# Array contains value (for metadata)
+K("tags").contains("python")
+
+# Not contains
+K.DOCUMENT.not_contains("deprecated")
+K("tags").not_contains("draft")
+
+# Regex matching
+K.DOCUMENT.regex(r"^Chapter \d+")
+K("title").not_regex(r"\[DRAFT\]")
+```
+
+### Logical Operators
+
+```python
+# AND - all conditions must match
+(K("category") == "science") & (K("year") > 2020)
+
+# OR - any condition must match
+(K("status") == "published") | (K("status") == "reviewed")
+
+# Complex combinations
+(
+    (K("category") == "science") &
+    ((K("year") > 2020) | (K("priority") == "high"))
+)
+```
+
+---
+
+## Rank Expressions
+
+Rank expressions define how search results are scored and ordered.
+
+### Knn
+
+K-nearest neighbors vector similarity search.
+
+<CodeGroup>
+```python Dense Vector Search
+from chromadb.execution.expression import Knn
+
+# Search main embeddings
+Knn(query=[0.1, 0.2, 0.3])
+
+# With custom limit
+Knn(query=[0.1, 0.2, 0.3], limit=20)
+
+# Return rank position instead of distance
+Knn(query=[0.1, 0.2, 0.3], return_rank=True)
+```
+
+```python String Query (Auto-Embedded)
+# String will be embedded using collection's embedding function
+Knn(query="machine learning algorithms")
+```
+
+```python Custom Field
+# Search a custom metadata field
+Knn(query=[0.1, 0.2], key="custom_embedding")
+```
+
+```python Sparse Vector Search
+from chromadb.api.types import SparseVector
+
+sparse_query = SparseVector(
+    indices=[0, 5, 10],
+    values=[0.8, 0.6, 0.9]
+)
+
+Knn(query=sparse_query, key="sparse_embedding")
+```
+</CodeGroup>
+
+<ParamField path="query" type="str | List[float] | SparseVector | ndarray" required>
+  Query for KNN search:
+  - String: Auto-embedded using collection's embedding function
+  - Dense vector: List or numpy array of floats
+  - Sparse vector: SparseVector object
+</ParamField>
+
+<ParamField path="key" type="Key | str" default="K.EMBEDDING">
+  Field to search:
+  - `K.EMBEDDING` (default): Main embedding field
+  - Custom field name: Search metadata field (e.g., `"sparse_embedding"`)
+</ParamField>
+
+<ParamField path="limit" type="int" default="16">
+  Maximum number of nearest neighbors to consider.
+</ParamField>
+
+<ParamField path="default" type="float" optional>
+  Default score for records not in KNN results.
+</ParamField>
+
+<ParamField path="return_rank" type="bool" default="false">
+  If True, return rank position (0, 1, 2, ...) instead of distance.
+</ParamField>
+
+---
+
+### Val
+
+Constant value for ranking expressions.
+
+```python
+from chromadb.execution.expression import Val
+
+# Constant score
+Val(0.5)
+
+# Use in expressions
+Knn(query=[0.1, 0.2]) * 0.8 + Val(0.2)
+```
+
+---
+
+### Rrf
+
+Reciprocal Rank Fusion for combining multiple ranking strategies.
+
+<CodeGroup>
+```python Basic RRF
+from chromadb.execution.expression import Rrf, Knn
+
+# Equal weighting
+Rrf([
+    Knn(query=[0.1, 0.2], return_rank=True),
+    Knn(query=[0.3, 0.4], key="sparse_embedding", return_rank=True)
+])
+```
+
+```python Weighted RRF
+# Relative weights (not normalized)
+Rrf(
+    ranks=[
+        Knn(query=[0.1, 0.2], return_rank=True),
+        Knn(query=[0.3, 0.4], key="custom_field", return_rank=True)
+    ],
+    weights=[2.0, 1.0],  # First is 2x more important
+    k=100
+)
+```
+
+```python Normalized Weights
+# Weights sum to 1.0
+Rrf(
+    ranks=[
+        Knn(query=[0.1, 0.2], return_rank=True),
+        Knn(query=[0.3, 0.4], key="custom_field", return_rank=True)
+    ],
+    weights=[3.0, 1.0],  # Will become [0.75, 0.25]
+    normalize=True,
+    k=60
+)
+```
+</CodeGroup>
+
+<ParamField path="ranks" type="List[Rank]" required>
+  List of ranking strategies to fuse. Each rank should use `return_rank=True`.
+</ParamField>
+
+<ParamField path="k" type="int" default="60">
+  Smoothing constant. Standard value from literature is 60.
+</ParamField>
+
+<ParamField path="weights" type="List[float]" optional>
+  Optional weights for each ranking strategy. If not provided, all ranks are weighted equally (1.0 each).
+</ParamField>
+
+<ParamField path="normalize" type="bool" default="false">
+  If True, normalize weights to sum to 1.0. If False, use weights as-is for relative importance.
+</ParamField>
+
+<Note>
+  RRF formula: `score = -sum(weight_i / (k + rank_i))` for each ranking strategy.
+  The negative is used because RRF produces higher scores for better results, but Chroma uses ascending order.
+</Note>
+
+---
+
+### Arithmetic Operations
+
+Rank expressions support arithmetic operations for complex scoring.
+
+```python
+from chromadb.execution.expression import Knn, Val
+
+# Addition
+Knn(query=[0.1, 0.2]) + Val(0.5)
+
+# Subtraction
+Knn(query=[0.1, 0.2]) - Val(0.1)
+
+# Multiplication (weighting)
+Knn(query=[0.1, 0.2]) * 0.8
+
+# Division
+Knn(query=[0.1, 0.2]) / Val(10.0)
+
+# Negation
+-Knn(query=[0.1, 0.2])
+
+# Absolute value
+abs(Knn(query=[0.1, 0.2]) - Val(0.5))
+
+# Complex expression
+Knn(query=[0.1, 0.2]) * 0.7 + Knn(query=[0.3, 0.4], key="sparse") * 0.3
+```
+
+### Mathematical Functions
+
+```python
+from chromadb.execution.expression import Knn
+
+rank = Knn(query=[0.1, 0.2])
+
+# Exponential
+rank.exp()
+
+# Natural logarithm
+rank.log()
+
+# Maximum
+rank.max(Val(0.5))
+
+# Minimum
+rank.min(Val(1.0))
+
+# Chaining
+rank.max(0.0).min(1.0)  # Clamp between 0 and 1
+```
+
+---
+
+## GroupBy
+
+Group results by metadata keys and aggregate within groups.
+
+<CodeGroup>
+```python Top N Per Group
+from chromadb.execution.expression import GroupBy, MinK, K
+
+# Top 3 per category
+GroupBy(
+    keys=[K("category")],
+    aggregate=MinK(keys=[K.SCORE], k=3)
+)
+```
+
+```python Multi-Key Grouping
+# Top 2 per (year, category) combination
+GroupBy(
+    keys=[K("year"), K("category")],
+    aggregate=MinK(keys=[K.SCORE], k=2)
+)
+```
+
+```python Multiple Sort Keys
+# Top 1 per category, sorted by priority then score
+GroupBy(
+    keys=[K("category")],
+    aggregate=MinK(keys=[K("priority"), K.SCORE], k=1)
+)
+```
+</CodeGroup>
+
+<ParamField path="keys" type="Key | List[Key]" required>
+  Metadata field(s) to group by.
+</ParamField>
+
+<ParamField path="aggregate" type="Aggregate" required>
+  Aggregation to apply within each group (MinK or MaxK).
+</ParamField>
+
+### MinK
+
+Keep K records with minimum values (ascending order).
+
+```python
+from chromadb.execution.expression import MinK, K
+
+# Keep top 3 by score (lowest scores)
+MinK(keys=[K.SCORE], k=3)
+
+# Multiple sort keys (priority, then score)
+MinK(keys=[K("priority"), K.SCORE], k=5)
+```
+
+### MaxK
+
+Keep K records with maximum values (descending order).
+
+```python
+from chromadb.execution.expression import MaxK, K
+
+# Keep bottom 2 by score (highest scores)
+MaxK(keys=[K.SCORE], k=2)
+```
+
+---
+
+## Select
+
+Select specific fields to return in results.
+
+```python
+from chromadb.execution.expression import Select, K
+
+# Select specific fields
+Select(keys={K.DOCUMENT, K.SCORE, "title", "author"})
+
+# Select all predefined fields
+Search().select_all()  # Returns: document, embedding, metadata, score
+```
+
+<ParamField path="keys" type="Set[Key | str]">
+  Set of fields to return:
+  - Predefined: `K.DOCUMENT`, `K.EMBEDDING`, `K.METADATA`, `K.SCORE`, `K.ID`
+  - Custom metadata fields: Any string (e.g., `"title"`, `"author"`)
+</ParamField>
+
+---
+
+## Examples
+
+### Basic Vector Search with Filtering
+
+```python
+from chromadb.execution.expression import Search, K, Knn
+
+results = collection.search(
+    Search()
+        .where(K("category") == "science")
+        .rank(Knn(query=[0.1, 0.2, 0.3]))
+        .limit(10)
+        .select(K.DOCUMENT, K.SCORE)
+)
+```
+
+### Hybrid Search with RRF
+
+```python
+from chromadb.execution.expression import Search, K, Knn, Rrf
+
+results = collection.search(
+    Search()
+        .where((K("status") == "published") & (K("year") >= 2020))
+        .rank(Rrf([
+            Knn(query=[0.1, 0.2, 0.3], return_rank=True),
+            Knn(query="semantic query", key="text_embedding", return_rank=True)
+        ], weights=[0.7, 0.3], k=60))
+        .limit(20)
+        .select(K.DOCUMENT, K.SCORE, "title", "author")
+)
+```
+
+### Weighted Combination
+
+```python
+from chromadb.execution.expression import Search, K, Knn, Val
+
+results = collection.search(
+    Search()
+        .rank(
+            Knn(query=[0.1, 0.2, 0.3]) * 0.8 +
+            Val(0.5) * 0.2
+        )
+        .limit(10)
+)
+```
+
+### Grouped Results
+
+```python
+from chromadb.execution.expression import Search, K, Knn, GroupBy, MinK
+
+# Top 3 documents per category
+results = collection.search(
+    Search()
+        .rank(Knn(query=[0.1, 0.2, 0.3]))
+        .group_by(GroupBy(
+            keys=[K("category")],
+            aggregate=MinK(keys=[K.SCORE], k=3)
+        ))
+        .select(K.DOCUMENT, K.SCORE, "category")
+)
+```
+
+### Complex Filtering
+
+```python
+from chromadb.execution.expression import Search, K, Knn
+
+results = collection.search(
+    Search()
+        .where(
+            (K("category").is_in(["science", "tech"])) &
+            (K("year") > 2020) &
+            (K.DOCUMENT.contains("AI"))
+        )
+        .rank(Knn(query=[0.1, 0.2, 0.3]))
+        .limit(15)
+)
+```
+
+### Working with Results
+
+```python
+from chromadb.execution.expression import Search, K, Knn
+
+results = collection.search(
+    Search()
+        .rank(Knn(query=[0.1, 0.2, 0.3]))
+        .limit(10)
+        .select(K.DOCUMENT, K.SCORE, "title")
+)
+
+# Convert to row format
+for payload_rows in results.rows():
+    for row in payload_rows:
+        print(f"ID: {row['id']}")
+        if 'document' in row:
+            print(f"Document: {row['document']}")
+        if 'score' in row:
+            print(f"Score: {row['score']}")
+```

@@ -1,0 +1,309 @@
+---
+title: 'Client-Server Deployment'
+description: 'Deploy Chroma in client-server mode for production applications'
+---
+
+Chroma can be deployed in client-server mode, allowing you to run a persistent Chroma server and connect to it from multiple clients. This is the recommended deployment mode for production applications.
+
+## Running the Chroma Server
+
+### Using the CLI
+
+The simplest way to run a Chroma server is using the built-in CLI command:
+
+```bash
+chroma run
+```
+
+This starts a Chroma server on `http://localhost:8000` with default settings.
+
+### Configuration Options
+
+Chroma server behavior can be customized using environment variables. Key configuration options from `chromadb/config.py`:
+
+#### Server Settings
+
+```bash
+# Persistence
+export IS_PERSISTENT=TRUE
+export PERSIST_DIRECTORY="./chroma"
+
+# Server host and port
+export CHROMA_SERVER_HOST="0.0.0.0"
+export CHROMA_SERVER_HTTP_PORT=8000
+
+# Enable SSL
+export CHROMA_SERVER_SSL_ENABLED=FALSE
+
+# CORS settings
+export CHROMA_SERVER_CORS_ALLOW_ORIGINS='["http://localhost:3000"]'
+
+# Thread pool size
+export CHROMA_SERVER_THREAD_POOL_SIZE=40
+
+# Allow reset operations (use with caution in production)
+export ALLOW_RESET=FALSE
+```
+
+#### Memory and Cache Settings
+
+```bash
+# Memory limit in bytes (0 = unlimited)
+export CHROMA_MEMORY_LIMIT_BYTES=0
+
+# Cache policy ("LRU" or None)
+export CHROMA_SEGMENT_CACHE_POLICY="LRU"
+```
+
+### Running with Docker Compose
+
+For production deployments, Docker Compose is recommended:
+
+```yaml
+version: '3.9'
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      - chroma-data:/chroma/chroma/
+    ports:
+      - 8000:8000
+    networks:
+      - net
+
+volumes:
+  chroma-data:
+    driver: local
+```
+
+Save this as `docker-compose.yml` and run:
+
+```bash
+docker-compose up -d
+```
+
+### Custom Build with Docker
+
+You can also build from source:
+
+```yaml
+version: '3.9'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: rust/Dockerfile
+      target: cli
+    volumes:
+      - chroma-data:/data
+    environment:
+      - CHROMA_OPEN_TELEMETRY__ENDPOINT=${CHROMA_OPEN_TELEMETRY__ENDPOINT}
+      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=${CHROMA_OPEN_TELEMETRY__SERVICE_NAME}
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  chroma-data:
+    driver: local
+```
+
+## Connecting Clients to the Server
+
+### Python Client
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+# Connect to remote server
+client = chromadb.HttpClient(
+    host="localhost",
+    port=8000,
+    settings=Settings(
+        chroma_api_impl="chromadb.api.fastapi.FastAPI",
+        chroma_server_ssl_enabled=False
+    )
+)
+
+# Verify connection
+heartbeat = client.heartbeat()  # Returns current server time
+print(f"Server is alive: {heartbeat}")
+```
+
+### With SSL/TLS
+
+```python
+client = chromadb.HttpClient(
+    host="my-chroma-server.com",
+    port=443,
+    settings=Settings(
+        chroma_server_ssl_enabled=True,
+        chroma_server_ssl_verify=True  # or path to CA bundle
+    )
+)
+```
+
+### Custom Headers
+
+```python
+client = chromadb.HttpClient(
+    host="localhost",
+    port=8000,
+    settings=Settings(
+        chroma_server_headers={
+            "X-Custom-Header": "value"
+        }
+    )
+)
+```
+
+### Connection Pool Settings
+
+```python
+client = chromadb.HttpClient(
+    settings=Settings(
+        chroma_http_keepalive_secs=40.0,
+        chroma_http_max_connections=100,
+        chroma_http_max_keepalive_connections=20
+    )
+)
+```
+
+## Client API Configuration
+
+The following settings control client behavior:
+
+```python
+from chromadb.config import Settings
+
+settings = Settings(
+    # Tenant and database
+    tenant_id="default",
+    topic_namespace="default",
+    
+    # Server connection
+    chroma_server_host="localhost",
+    chroma_server_http_port=8000,
+    chroma_server_ssl_enabled=False,
+    
+    # API version
+    chroma_server_api_default_path="/api/v2",
+    
+    # Connection pooling
+    chroma_http_keepalive_secs=40.0,
+    chroma_http_max_connections=None,
+    chroma_http_max_keepalive_connections=None
+)
+
+client = chromadb.HttpClient(settings=settings)
+```
+
+## Verifying the Deployment
+
+### Health Check
+
+```python
+# Python
+try:
+    heartbeat = client.heartbeat()
+    print(f"✓ Server is healthy: {heartbeat}")
+except Exception as e:
+    print(f"✗ Server is down: {e}")
+```
+
+```bash
+# cURL
+curl http://localhost:8000/api/v2/heartbeat
+```
+
+### Version Check
+
+```python
+version = client.get_version()
+print(f"Server version: {version}")
+```
+
+## Production Considerations
+
+### Security
+
+1. **Enable authentication** - See the [Authentication guide](/guides/authentication)
+2. **Use SSL/TLS** - Always use HTTPS in production
+3. **Disable reset** - Set `ALLOW_RESET=FALSE`
+4. **Configure CORS** - Restrict allowed origins
+
+### Performance
+
+1. **Adjust thread pool size** - `CHROMA_SERVER_THREAD_POOL_SIZE` based on workload
+2. **Enable caching** - `CHROMA_SEGMENT_CACHE_POLICY=LRU` with appropriate memory limits
+3. **Persistence** - Always enable `IS_PERSISTENT=TRUE` for production
+
+### Monitoring
+
+```bash
+# Enable OpenTelemetry
+export CHROMA_OTEL_COLLECTION_ENDPOINT="http://otel-collector:4317"
+export CHROMA_OTEL_SERVICE_NAME="chromadb"
+export CHROMA_OTEL_GRANULARITY="all"
+```
+
+### File Descriptors
+
+For high-load servers, increase the file descriptor limit:
+
+```bash
+export CHROMA_SERVER_NOFILE=65536
+```
+
+## Troubleshooting
+
+### Connection Refused
+
+Ensure the server is running and the host/port are correct:
+
+```bash
+netstat -an | grep 8000
+```
+
+### SSL Verification Failures
+
+For self-signed certificates:
+
+```python
+settings=Settings(
+    chroma_server_ssl_verify=False  # Use with caution
+)
+```
+
+### Port Already in Use
+
+Change the port in both server and client configuration:
+
+```bash
+export CHROMA_SERVER_HTTP_PORT=8001
+```
+
+## Migration from Embedded Mode
+
+If you're migrating from embedded Chroma to client-server:
+
+1. Export your data from embedded client
+2. Start the Chroma server
+3. Import data to the server
+4. Update client code to use `HttpClient` instead of `Client`
+
+See the [Migration Guide](https://docs.trychroma.com/deployment/migration) for details.

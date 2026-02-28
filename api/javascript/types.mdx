@@ -1,0 +1,599 @@
+---
+title: Types
+description: TypeScript type definitions for the Chroma JavaScript client
+---
+
+## Core Types
+
+### Embeddings
+
+```typescript
+type Embedding = number[];
+type Embeddings = Embedding[];
+```
+
+Embeddings are represented as arrays of numbers. A single embedding is a one-dimensional array, while multiple embeddings are a two-dimensional array.
+
+**Example:**
+
+```typescript
+const singleEmbedding: Embedding = [0.1, 0.2, 0.3];
+const multipleEmbeddings: Embeddings = [
+  [0.1, 0.2, 0.3],
+  [0.4, 0.5, 0.6]
+];
+```
+
+### Documents
+
+```typescript
+type Document = string;
+type Documents = Document[];
+```
+
+Documents are text strings that can be embedded automatically.
+
+**Example:**
+
+```typescript
+const singleDocument: Document = "This is a document";
+const multipleDocuments: Documents = [
+  "First document",
+  "Second document"
+];
+```
+
+### IDs
+
+```typescript
+type ID = string;
+type IDs = ID[];
+```
+
+IDs are unique identifiers for items in a collection.
+
+**Example:**
+
+```typescript
+const singleId: ID = "doc1";
+const multipleIds: IDs = ["doc1", "doc2", "doc3"];
+```
+
+### Metadata
+
+```typescript
+type Metadata = Record<string, string | number | boolean>;
+type Metadatas = Metadata[];
+```
+
+Metadata is a key-value object that can be attached to items. Values can be strings, numbers, or booleans.
+
+**Example:**
+
+```typescript
+const singleMetadata: Metadata = {
+  "category": "science",
+  "year": 2024,
+  "published": true
+};
+
+const multipleMetadatas: Metadatas = [
+  { "category": "science", "year": 2024 },
+  { "category": "history", "year": 2023 }
+];
+```
+
+### CollectionMetadata
+
+```typescript
+type CollectionMetadata = Record<string, boolean | number | string>;
+```
+
+Metadata that can be attached to a collection.
+
+**Example:**
+
+```typescript
+const collectionMetadata: CollectionMetadata = {
+  "description": "My collection of documents",
+  "version": 1,
+  "public": false
+};
+```
+
+## Query Types
+
+### Where
+
+```typescript
+type Where = BaseWhere | LogicalWhere;
+
+type BaseWhere = {
+  [key: string]: LiteralValue | OperatorExpression;
+};
+
+type LogicalWhere = {
+  [key in LogicalOperator]?: Where[];
+};
+
+type OperatorExpression = {
+  [key in WhereOperator | InclusionOperator | LogicalOperator]?:
+    | LiteralValue
+    | ListLiteralValue;
+};
+```
+
+**Operators:**
+
+- **Comparison:** `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
+- **Inclusion:** `$in`, `$nin`
+- **Logical:** `$and`, `$or`
+
+**Example:**
+
+```typescript
+// Simple equality
+const where1: Where = { "category": "science" };
+
+// Comparison operators
+const where2: Where = {
+  "year": { "$gte": 2020 }
+};
+
+// Inclusion operators
+const where3: Where = {
+  "category": { "$in": ["science", "technology"] }
+};
+
+// Logical operators
+const where4: Where = {
+  "$and": [
+    { "category": "science" },
+    { "year": { "$gte": 2020 } }
+  ]
+};
+```
+
+### WhereDocument
+
+```typescript
+type WhereDocument = {
+  [key in WhereDocumentOperator]?:
+    | LiteralValue
+    | LiteralNumber
+    | WhereDocument[];
+};
+```
+
+**Operators:**
+
+- `$contains` - Document contains the string
+- `$not_contains` - Document does not contain the string
+- `$and` - Logical AND
+- `$or` - Logical OR
+
+**Example:**
+
+```typescript
+// Simple contains
+const whereDoc1: WhereDocument = {
+  "$contains": "search term"
+};
+
+// Logical operators
+const whereDoc2: WhereDocument = {
+  "$and": [
+    { "$contains": "science" },
+    { "$not_contains": "fiction" }
+  ]
+};
+```
+
+### IncludeEnum
+
+```typescript
+enum IncludeEnum {
+  Documents = "documents",
+  Embeddings = "embeddings",
+  Metadatas = "metadatas",
+  Distances = "distances",
+  Uris = "uris"
+}
+```
+
+Specifies which fields to include in query and get responses.
+
+**Example:**
+
+```typescript
+const include: IncludeEnum[] = [
+  IncludeEnum.Documents,
+  IncludeEnum.Metadatas,
+  IncludeEnum.Distances
+];
+
+// Or use string literals
+const includeStrings = ["documents", "metadatas", "distances"];
+```
+
+## Response Types
+
+### GetResponse
+
+```typescript
+type GetResponse = {
+  ids: IDs;
+  embeddings: Embeddings | null;
+  documents: (Document | null)[];
+  metadatas: (Metadata | null)[];
+  included: IncludeEnum[];
+};
+```
+
+Response from `collection.get()` operations.
+
+**Example:**
+
+```typescript
+const response: GetResponse = await collection.get({
+  ids: ["id1", "id2"]
+});
+
+console.log(response.ids);        // ["id1", "id2"]
+console.log(response.documents);  // ["doc1", "doc2"]
+console.log(response.metadatas);  // [{ ... }, { ... }]
+```
+
+### MultiQueryResponse
+
+```typescript
+type MultiQueryResponse = {
+  ids: IDs[];
+  embeddings: Embeddings[] | null;
+  documents: (Document | null)[][];
+  metadatas: (Metadata | null)[][];
+  distances: number[][] | null;
+  included: IncludeEnum[];
+};
+```
+
+Response from `collection.query()` operations. Each array contains results for each query.
+
+**Example:**
+
+```typescript
+const response: MultiQueryResponse = await collection.query({
+  queryTexts: ["query1", "query2"],
+  nResults: 5
+});
+
+// Results for first query
+console.log(response.ids[0]);       // ["id1", "id2", ...]
+console.log(response.distances[0]); // [0.1, 0.2, ...]
+
+// Results for second query
+console.log(response.ids[1]);       // ["id3", "id4", ...]
+console.log(response.distances[1]); // [0.15, 0.25, ...]
+```
+
+### SingleQueryResponse
+
+```typescript
+type SingleQueryResponse = {
+  ids: IDs;
+  embeddings: Embeddings | null;
+  documents: (Document | null)[];
+  metadatas: (Metadata | null)[];
+  distances: number[] | null;
+  included: IncludeEnum[];
+};
+```
+
+Response from a single query operation.
+
+### QueryResponse
+
+```typescript
+type QueryResponse = SingleQueryResponse | MultiQueryResponse;
+```
+
+Union type for query responses.
+
+## Parameter Types
+
+### AddRecordsParams
+
+```typescript
+type AddRecordsParams =
+  | SingleAddRecordOperationParams
+  | MultiAddRecordsOperationParams;
+
+type BaseRecordOperationParams = {
+  ids: ID | IDs;
+  embeddings?: Embedding | Embeddings;
+  metadatas?: Metadata | Metadatas;
+  documents?: Document | Documents;
+};
+```
+
+Parameters for adding records to a collection. Must provide either `embeddings` or `documents`.
+
+**Example:**
+
+```typescript
+const params: AddRecordsParams = {
+  ids: ["id1", "id2"],
+  documents: ["document1", "document2"],
+  metadatas: [{ "key": "value1" }, { "key": "value2" }]
+};
+```
+
+### QueryRecordsParams
+
+```typescript
+type QueryRecordsParams =
+  | SingleTextQueryParams
+  | SingleEmbeddingQueryParams
+  | MultiTextQueryParams
+  | MultiEmbeddingQueryParams;
+
+type BaseQueryParams = {
+  ids?: ID | IDs;
+  nResults?: PositiveInteger;
+  where?: Where;
+  queryTexts?: string | string[];
+  queryEmbeddings?: Embedding | Embeddings;
+  whereDocument?: WhereDocument;
+  include?: IncludeEnum[];
+};
+```
+
+Parameters for querying a collection. Must provide either `queryTexts` or `queryEmbeddings`.
+
+**Example:**
+
+```typescript
+const params: QueryRecordsParams = {
+  queryTexts: "search query",
+  nResults: 10,
+  where: { "category": "science" },
+  include: ["documents", "metadatas", "distances"]
+};
+```
+
+### UpdateRecordsParams
+
+```typescript
+type UpdateRecordsParams =
+  | MultiRecordOperationParams
+  | SingleRecordOperationParams;
+```
+
+Parameters for updating records in a collection.
+
+**Example:**
+
+```typescript
+const params: UpdateRecordsParams = {
+  ids: ["id1", "id2"],
+  documents: ["updated doc1", "updated doc2"],
+  metadatas: [{ "updated": true }, { "updated": true }]
+};
+```
+
+### DeleteParams
+
+```typescript
+type DeleteParams = {
+  ids?: ID | IDs;
+  where?: Where;
+  whereDocument?: WhereDocument;
+};
+```
+
+Parameters for deleting records from a collection.
+
+**Example:**
+
+```typescript
+const params: DeleteParams = {
+  where: { "year": { "$lt": 2020 } }
+};
+```
+
+## Authentication Types
+
+### AuthOptions
+
+```typescript
+type AuthOptions = {
+  provider: ClientAuthProvider | string | undefined;
+  credentials?: any | undefined;
+  tokenHeaderType?: TokenHeaderType | undefined;
+};
+
+type TokenHeaderType = "AUTHORIZATION" | "X_CHROMA_TOKEN";
+```
+
+Configuration for authentication.
+
+**Example:**
+
+```typescript
+// Token authentication
+const authOptions: AuthOptions = {
+  provider: "token",
+  credentials: "your-api-key",
+  tokenHeaderType: "AUTHORIZATION"
+};
+
+// Basic authentication
+const basicAuth: AuthOptions = {
+  provider: "basic",
+  credentials: "username:password"
+};
+```
+
+### ClientAuthProvider
+
+```typescript
+interface ClientAuthProvider {
+  authenticate(): AuthHeaders;
+}
+
+type AuthHeaders = { [header: string]: string };
+```
+
+Interface for custom authentication providers.
+
+**Example:**
+
+```typescript
+class CustomAuthProvider implements ClientAuthProvider {
+  authenticate(): AuthHeaders {
+    return {
+      "Authorization": "Bearer my-token"
+    };
+  }
+}
+```
+
+## Embedding Function Types
+
+### IEmbeddingFunction
+
+```typescript
+interface IEmbeddingFunction {
+  generate(texts: string[]): Promise<number[][]>;
+  name?: string;
+  defaultSpace?(): EmbeddingFunctionSpace;
+  supportedSpaces?(): EmbeddingFunctionSpace[];
+  buildFromConfig?(config: Record<string, any>): IEmbeddingFunction;
+  getConfig?(): Record<string, any>;
+  validateConfigUpdate?(
+    oldConfig: Record<string, any>,
+    newConfig: Record<string, any>
+  ): void;
+  validateConfig?(config: Record<string, any>): void;
+}
+
+type EmbeddingFunctionSpace = "cosine" | "l2" | "ip";
+```
+
+Interface for custom embedding functions.
+
+**Example:**
+
+```typescript
+class MyEmbeddingFunction implements IEmbeddingFunction {
+  async generate(texts: string[]): Promise<number[][]> {
+    // Custom embedding logic
+    return texts.map(text => [0.1, 0.2, 0.3]);
+  }
+  
+  defaultSpace(): EmbeddingFunctionSpace {
+    return "cosine";
+  }
+}
+```
+
+## Configuration Types
+
+### ChromaClientParams
+
+```typescript
+type ChromaClientParams = {
+  path?: string;
+  fetchOptions?: RequestInit;
+  auth?: AuthOptions;
+  tenant?: string;
+  database?: string;
+};
+```
+
+Parameters for creating a ChromaClient.
+
+### CreateCollectionParams
+
+```typescript
+type CreateCollectionParams = {
+  name: string;
+  metadata?: CollectionMetadata;
+  embeddingFunction?: IEmbeddingFunction;
+  configuration?: CreateCollectionConfiguration;
+};
+```
+
+Parameters for creating a collection.
+
+### GetCollectionParams
+
+```typescript
+type GetCollectionParams = {
+  name: string;
+  embeddingFunction?: IEmbeddingFunction;
+};
+```
+
+Parameters for getting a collection.
+
+### DeleteCollectionParams
+
+```typescript
+type DeleteCollectionParams = {
+  name: string;
+};
+```
+
+Parameters for deleting a collection.
+
+### ListCollectionsParams
+
+```typescript
+type ListCollectionsParams = {
+  limit?: PositiveInteger;
+  offset?: PositiveInteger;
+};
+```
+
+Parameters for listing collections.
+
+### PeekParams
+
+```typescript
+type PeekParams = {
+  limit?: PositiveInteger;
+};
+```
+
+Parameters for peeking at collection contents.
+
+### ForkCollectionParams
+
+```typescript
+type ForkCollectionParams = {
+  newName: string;
+};
+```
+
+Parameters for forking a collection.
+
+## Utility Types
+
+### PositiveInteger
+
+```typescript
+type PositiveInteger = number;
+```
+
+Represents a positive integer value.
+
+### ConfigOptions
+
+```typescript
+type ConfigOptions = {
+  options?: RequestInit;
+};
+```
+
+Configuration options for HTTP requests.

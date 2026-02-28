@@ -1,0 +1,426 @@
+---
+title: Docker Deployment
+description: Deploy Chroma using Docker and Docker Compose
+---
+
+Chroma provides official Docker images for easy deployment. This guide covers single-instance Docker deployments using the official images.
+
+## Quick Start
+
+The fastest way to get Chroma running with Docker:
+
+```bash
+docker run -p 8000:8000 ghcr.io/chroma-core/chroma:latest
+```
+
+This starts Chroma in ephemeral mode. Data will be lost when the container stops.
+
+## Docker Compose (Recommended)
+
+### Basic Setup with Persistence
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.9'
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      # Default configuration for persist_directory
+      - chroma-data:/chroma/chroma/
+    ports:
+      - 8000:8000
+    networks:
+      - net
+
+volumes:
+  chroma-data:
+    driver: local
+```
+
+Start the server:
+
+```bash
+docker-compose up -d
+```
+
+### Production Configuration
+
+For production deployments, use the configuration from the Chroma repository:
+
+```yaml
+version: '3.9'
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  server:
+    image: server
+    build:
+      context: .
+      dockerfile: rust/Dockerfile
+      target: cli
+    volumes:
+      # The default config specifies a persist_directory of /data
+      - chroma-data:/data
+    environment:
+      - CHROMA_OPEN_TELEMETRY__ENDPOINT=${CHROMA_OPEN_TELEMETRY__ENDPOINT}
+      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=${CHROMA_OPEN_TELEMETRY__SERVICE_NAME}
+      - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS}
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - net
+
+volumes:
+  chroma-data:
+    driver: local
+```
+
+### Environment File
+
+Create a `.env` file in the same directory:
+
+```bash
+# Observability (optional)
+CHROMA_OPEN_TELEMETRY__ENDPOINT=
+CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chromadb
+OTEL_EXPORTER_OTLP_HEADERS={}
+```
+
+## Building from Source
+
+Chroma's official Dockerfile uses a multi-stage build process:
+
+### Dockerfile Overview
+
+The Dockerfile (`Dockerfile` in the repository root) creates a production-ready image:
+
+```dockerfile
+FROM python:3.11-slim-bookworm AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential gcc g++ cmake autoconf \
+    python3-dev unzip curl make
+
+# Install Rust toolchain
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+# Install protobuf compiler
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v31.1/protoc-31.1-linux-x86_64.zip && \
+    unzip -o protoc-*.zip -d /usr/local
+
+# Build Chroma
+COPY . /chroma
+WORKDIR /chroma
+RUN make -C idl proto_python
+RUN python3 -m maturin build
+RUN pip install --prefix="/install" --find-links target/wheels/ chromadb
+
+# Final stage
+FROM python:3.11-slim-bookworm AS final
+
+COPY --from=builder /install /usr/local
+COPY --from=builder /chroma /chroma
+
+ENV CHROMA_HOST_ADDR="0.0.0.0"
+ENV CHROMA_HOST_PORT=8000
+ENV CHROMA_WORKERS=1
+ENV CHROMA_LOG_CONFIG="chromadb/log_config.yml"
+ENV CHROMA_TIMEOUT_KEEP_ALIVE=30
+
+EXPOSE 8000
+
+ENTRYPOINT ["/docker_entrypoint.sh"]
+CMD [ "--workers ${CHROMA_WORKERS} --host ${CHROMA_HOST_ADDR} --port ${CHROMA_HOST_PORT} --proxy-headers --reload --log-config ${CHROMA_LOG_CONFIG} --timeout-keep-alive ${CHROMA_TIMEOUT_KEEP_ALIVE}"]
+```
+
+### Build Custom Image
+
+```bash
+# Build the image
+docker build -t my-chroma:latest .
+
+# Run the custom image
+docker run -p 8000:8000 -v chroma-data:/chroma/chroma my-chroma:latest
+```
+
+### Build Arguments
+
+```bash
+# Rebuild hnswlib from source (useful for specific CPU architectures)
+docker build --build-arg REBUILD_HNSWLIB=true -t my-chroma:latest .
+
+# Specify protobuf version
+docker build --build-arg PROTOC_VERSION=31.1 -t my-chroma:latest .
+```
+
+## Environment Variables
+
+### Server Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHROMA_HOST_ADDR` | `0.0.0.0` | Host address to bind to |
+| `CHROMA_HOST_PORT` | `8000` | Port to listen on |
+| `CHROMA_WORKERS` | `1` | Number of worker processes |
+| `CHROMA_LOG_CONFIG` | `chromadb/log_config.yml` | Path to logging configuration |
+| `CHROMA_TIMEOUT_KEEP_ALIVE` | `30` | Keep-alive timeout in seconds |
+| `CHROMA_SERVER_NOFILE` | `65536` | Maximum number of open files |
+
+### Persistence
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IS_PERSISTENT` | `FALSE` | Enable persistent storage |
+| `PERSIST_DIRECTORY` | `./chroma` | Directory for persistent data |
+
+### Authentication
+
+```yaml
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.basic_authn.BasicAuthenticationServerProvider
+      - CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=/chroma/auth/credentials.htpasswd
+    volumes:
+      - ./credentials.htpasswd:/chroma/auth/credentials.htpasswd
+      - chroma-data:/chroma/chroma/
+```
+
+See the [Authentication guide](/guides/authentication) for more details.
+
+### Observability
+
+```yaml
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_OTEL_COLLECTION_ENDPOINT=http://jaeger:4317
+      - CHROMA_OTEL_SERVICE_NAME=chromadb
+      - OTEL_EXPORTER_OTLP_HEADERS={"x-api-key":"your-key"}
+```
+
+## Volume Mounts and Persistence
+
+### Data Directory
+
+The default persist directory depends on the configuration:
+
+**Python-based image (ghcr.io/chroma-core/chroma):**
+```yaml
+volumes:
+  - chroma-data:/chroma/chroma/
+```
+
+**Rust-based image (built from source):**
+```yaml
+volumes:
+  - chroma-data:/data
+```
+
+### Custom Persist Directory
+
+```yaml
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/custom/path
+    volumes:
+      - chroma-data:/custom/path
+```
+
+### Backup Data
+
+```bash
+# Create a backup
+docker run --rm -v chroma-data:/data -v $(pwd):/backup \
+  ubuntu tar czf /backup/chroma-backup.tar.gz -C /data .
+
+# Restore from backup
+docker run --rm -v chroma-data:/data -v $(pwd):/backup \
+  ubuntu tar xzf /backup/chroma-backup.tar.gz -C /data
+```
+
+## Docker Commands
+
+### Basic Operations
+
+```bash
+# Start Chroma
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop Chroma
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
+```
+
+### Maintenance
+
+```bash
+# Check health
+curl http://localhost:8000/api/v2/heartbeat
+
+# View running containers
+docker-compose ps
+
+# Restart the service
+docker-compose restart server
+
+# Update to latest image
+docker-compose pull
+docker-compose up -d
+```
+
+## Healthcheck
+
+The official configuration includes a healthcheck:
+
+```yaml
+healthcheck:
+  test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat" ]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+```
+
+Check health status:
+
+```bash
+docker inspect --format='{{.State.Health.Status}}' <container-id>
+```
+
+## Restart Policies
+
+Configured restart behavior:
+
+```yaml
+restart: unless-stopped  # Options: "no", "always", "on-failure", "unless-stopped"
+```
+
+## Networking
+
+### Custom Network
+
+```yaml
+networks:
+  chroma-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+services:
+  server:
+    networks:
+      chroma-network:
+        ipv4_address: 172.28.0.2
+```
+
+### Expose to External Network
+
+```yaml
+services:
+  server:
+    ports:
+      - "0.0.0.0:8000:8000"  # Expose on all interfaces
+      # or
+      - "127.0.0.1:8000:8000"  # Localhost only
+```
+
+## Entrypoint Script
+
+The Docker entrypoint (`/docker_entrypoint.sh`) handles service startup:
+
+```bash
+#!/bin/bash
+set -e
+
+export IS_PERSISTENT=1
+export CHROMA_SERVER_NOFILE=${CHROMA_SERVER_NOFILE:-65536}
+args="$@"
+
+if [[ $args =~ ^uvicorn.* ]]; then
+    exec $(eval echo "$args")
+else
+    exec uvicorn chromadb.app:app $(eval echo "$args")
+fi
+```
+
+## Troubleshooting
+
+### Container Fails to Start
+
+```bash
+# Check logs
+docker-compose logs server
+
+# Check if port is already in use
+lsof -i :8000
+
+# Verify volume permissions
+docker-compose exec server ls -la /chroma/chroma
+```
+
+### Data Not Persisting
+
+Verify `IS_PERSISTENT=TRUE` is set and volume is mounted:
+
+```bash
+docker-compose exec server env | grep PERSISTENT
+docker volume inspect <volume-name>
+```
+
+### Performance Issues
+
+Increase worker count for better concurrency:
+
+```yaml
+environment:
+  - CHROMA_WORKERS=4
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/operations/configuration">
+    Learn about advanced configuration options
+  </Card>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Set up authentication and authorization
+  </Card>
+  <Card title="Kubernetes" icon="kubernetes" href="/deployment/kubernetes">
+    Scale to Kubernetes for production
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/operations/observability">
+    Monitor your Chroma deployment
+  </Card>
+</CardGroup>

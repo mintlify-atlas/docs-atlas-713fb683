@@ -1,0 +1,221 @@
+---
+title: Go Client Overview
+description: Official Go client for Chroma - the AI-native open-source embedding database
+---
+
+<Note>
+The Go client is primarily used for Chroma's internal services and backend infrastructure. For application development, we recommend using the [Python](/api/python/client) or [JavaScript](/api/javascript/client) clients which provide more comprehensive client APIs.
+</Note>
+
+## Package Structure
+
+Chroma's Go codebase is organized into several key packages:
+
+```
+github.com/chroma-core/chroma/go
+├── cmd/                    # Command-line tools
+│   ├── coordinator/       # Coordinator service
+│   └── flag/             # CLI flag handling
+├── pkg/                   # Core packages
+│   ├── common/           # Common types and utilities
+│   ├── grpcutils/        # gRPC utilities
+│   ├── sysdb/            # System database and coordinator
+│   ├── types/            # Core type definitions
+│   └── utils/            # Utility functions
+└── shared/               # Shared components
+```
+
+## Core Packages
+
+### Types Package
+
+The `types` package provides fundamental type definitions:
+
+```go types.go
+package types
+
+import (
+    "github.com/google/uuid"
+)
+
+type Timestamp = int64
+type UniqueID uuid.UUID
+
+// Create a new unique ID
+func NewUniqueID() UniqueID {
+    return UniqueID(uuid.New())
+}
+
+// Parse a string into a UniqueID
+func Parse(s string) (UniqueID, error) {
+    id, err := uuid.Parse(s)
+    return UniqueID(id), err
+}
+```
+
+### Common Package
+
+Provides shared constants and component interfaces:
+
+```go
+package common
+
+// Component interface for service components
+type Component interface {
+    Start() error
+    Stop() error
+}
+```
+
+### SysDB Coordinator
+
+The coordinator package manages metadata and system state:
+
+```go
+package coordinator
+
+import (
+    "github.com/chroma-core/chroma/go/pkg/sysdb/coordinator/model"
+)
+
+// Coordinator manages collections, segments, and databases
+type Coordinator interface {
+    // Collection operations
+    CreateCollection(ctx context.Context, collection *model.Collection) error
+    GetCollection(ctx context.Context, collectionID string) (*model.Collection, error)
+    DeleteCollection(ctx context.Context, collectionID string) error
+    
+    // Database operations
+    CreateDatabase(ctx context.Context, database *model.Database) error
+    GetDatabase(ctx context.Context, name string) (*model.Database, error)
+}
+```
+
+## Dependencies
+
+Key dependencies used in the Go codebase:
+
+```go go.mod
+module github.com/chroma-core/chroma/go
+
+go 1.23.0
+
+require (
+    github.com/google/uuid v1.6.0
+    github.com/spf13/cobra v1.7.0
+    google.golang.org/grpc v1.65.0
+    google.golang.org/protobuf v1.34.2
+    gorm.io/gorm v1.25.7
+    gorm.io/driver/postgres v1.5.2
+    github.com/aws/aws-sdk-go-v2 v1.36.3
+    go.opentelemetry.io/otel v1.36.0
+)
+```
+
+## Building from Source
+
+To build the Go components:
+
+```bash
+cd go/
+make build
+```
+
+### Prerequisites
+
+1. **Go 1.23+** - The project requires Go 1.23.0 or later
+2. **Protocol Buffers** - Install `protoc`, `protoc-gen-go`, and `protoc-gen-go-grpc`
+3. **PostgreSQL** (for development) - Required for local testing
+
+Refer to the [source Dockerfile](https://github.com/chroma-core/chroma/blob/main/go/Dockerfile) for exact version requirements.
+
+## Database Setup
+
+For local development with PostgreSQL:
+
+```bash
+# Install PostgreSQL
+brew install postgresql@14
+
+# Start PostgreSQL
+brew services start postgresql
+
+# Create database and user
+psql postgres
+create role chroma with login password 'chroma';
+alter role chroma with superuser;
+create database chroma;
+
+# Set environment variables
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+```
+
+## Schema Migrations
+
+Chroma uses [Atlas](https://atlasgo.io/) for schema migrations:
+
+```bash
+# Generate a new migration
+atlas migrate diff --env dev
+
+# Apply migrations
+atlas --env dev migrate apply --url "postgres://chroma:chroma@localhost:5432/chroma?sslmode=disable"
+```
+
+## gRPC Services
+
+The Go backend provides gRPC services for internal communication:
+
+```go
+package grpcutils
+
+import (
+    "google.golang.org/grpc"
+)
+
+// Service configuration
+type Config struct {
+    Host string
+    Port int
+    // Additional config options
+}
+
+// Create a new gRPC server
+func NewServer(config Config) (*grpc.Server, error) {
+    // Server initialization
+}
+```
+
+## Development Workflow
+
+1. **Make changes** to Go source files
+2. **Generate protobuf** files: `make build`
+3. **Run tests**: `go test ./...`
+4. **Apply migrations** if schema changed
+
+## Architecture Overview
+
+The Go backend serves as Chroma's distributed system coordinator:
+
+- **Coordinator Service**: Manages metadata, collections, and segments
+- **gRPC APIs**: Internal service communication
+- **SysDB**: Metadata storage using PostgreSQL
+- **Storage Integration**: S3 and local filesystem support
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Python Client" icon="python" href="/api/python/client">
+    Recommended client for application development
+  </Card>
+  <Card title="JavaScript Client" icon="js" href="/api/javascript/client">
+    Browser and Node.js client library
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/api/cli/commands">
+    Command-line interface documentation
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/chroma-core/chroma">
+    View source code and contribute
+  </Card>
+</CardGroup>

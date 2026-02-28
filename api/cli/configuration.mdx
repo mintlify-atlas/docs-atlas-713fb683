@@ -1,0 +1,408 @@
+---
+title: CLI Configuration
+description: Configure the Chroma CLI with profiles, environment variables, and configuration files
+---
+
+The Chroma CLI stores configuration in your home directory under `~/.chroma/`. This includes authentication credentials, profiles, and user preferences.
+
+## Configuration Directory
+
+All CLI configuration is stored in:
+
+```
+~/.chroma/
+├── credentials     # Profile credentials (API keys and tenant IDs)
+└── config.json     # CLI configuration and preferences
+```
+
+## Profiles
+
+Profiles allow you to manage multiple Chroma Cloud accounts or teams from a single CLI installation.
+
+### Profile Structure
+
+Profiles are stored in `~/.chroma/credentials` as JSON:
+
+```json credentials
+{
+  "default": {
+    "api_key": "your-api-key",
+    "tenant_id": "your-tenant-id"
+  },
+  "my-team": {
+    "api_key": "team-api-key",
+    "tenant_id": "team-tenant-id"
+  }
+}
+```
+
+### Managing Profiles
+
+<CodeGroup>
+
+```bash List Profiles
+chroma profile list
+```
+
+```bash Set Active Profile
+chroma profile use my-team
+```
+
+```bash Show Current Profile
+chroma profile show
+```
+
+```bash Delete Profile
+chroma profile delete old-profile
+```
+
+```bash Rename Profile
+chroma profile rename old-name new-name
+```
+
+</CodeGroup>
+
+### Profile Naming Rules
+
+- Profile names must contain only alphanumeric characters, underscores, or hyphens
+- Names cannot be empty
+- Names are case-sensitive
+
+## CLI Configuration File
+
+The `~/.chroma/config.json` file stores CLI preferences:
+
+```json config.json
+{
+  "current_profile": "default",
+  "theme": "Dark",
+  "show_updates": true,
+  "sample_apps": {
+    "installed": {
+      "basic-rag": "1.0.0",
+      "multimodal-search": "1.2.0"
+    }
+  }
+}
+```
+
+### Configuration Fields
+
+<ParamField path="current_profile" type="string">
+  The name of the currently active profile. Used for all Chroma Cloud commands.
+</ParamField>
+
+<ParamField path="theme" type="enum" default="Dark">
+  UI theme for the collection browser. Options: `Dark`, `Light`
+</ParamField>
+
+<ParamField path="show_updates" type="boolean" default="true">
+  Whether to show update notifications when a new CLI version is available
+</ParamField>
+
+<ParamField path="sample_apps.installed" type="object">
+  Tracks installed sample applications and their versions
+</ParamField>
+
+## Environment Variables
+
+The CLI and Chroma clients support several environment variables:
+
+### Chroma Cloud Connection
+
+```bash .env
+CHROMA_API_KEY=your-api-key
+CHROMA_TENANT=your-tenant-id
+CHROMA_DATABASE=your-database-name
+```
+
+These variables can be generated using:
+
+```bash
+chroma db connect my-database --env-vars
+```
+
+Or written to a `.env` file:
+
+```bash
+chroma db connect my-database --env-file
+```
+
+### Local Development
+
+```bash
+CHROMA_HOST=http://localhost:8000
+CHROMA_TENANT=default_tenant
+CHROMA_DATABASE=default_database
+```
+
+### Backend Development (Go)
+
+For developing Chroma's Go backend:
+
+```bash
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+```
+
+## Server Configuration
+
+When running a local Chroma server with `chroma run`, you can use a YAML configuration file:
+
+### Configuration File Format
+
+```yaml chroma-config.yaml
+# Server settings
+listen_address: "localhost"
+port: 8000
+
+# Data persistence
+persist_path: "./chroma-data"
+
+# Frontend configuration
+frontend:
+  # SQLite database settings
+  sqlitedb:
+    url: "./chroma-data/chroma.sqlite3"
+  
+  # CORS settings
+  cors:
+    allow_origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["GET", "POST", "PUT", "DELETE"]
+    allow_headers: ["*"]
+```
+
+### Running with Config File
+
+```bash
+chroma run /path/to/chroma-config.yaml
+```
+
+<Note>
+When using a config file, the `--path`, `--host`, and `--port` flags are not available.
+</Note>
+
+## Authentication Flow
+
+### Interactive Browser Login
+
+The default login method opens your browser:
+
+```bash
+chroma login
+```
+
+**Steps:**
+1. CLI generates a temporary token
+2. Opens browser to Chroma Cloud
+3. You authenticate with your account
+4. Select team (if applicable)
+5. Credentials saved to `~/.chroma/credentials`
+6. Profile set as active
+
+### Headless Login
+
+For CI/CD or automated workflows:
+
+```bash
+chroma login --api-key YOUR_API_KEY --profile ci-profile
+```
+
+<Warning>
+Never commit API keys to version control. Use environment variables or secrets management.
+</Warning>
+
+## Connection Priority
+
+When connecting to Chroma, credentials are resolved in this order:
+
+1. **Command-line flags** (`--db`, `--host`, etc.)
+2. **Environment variables** (`CHROMA_API_KEY`, `CHROMA_DATABASE`)
+3. **Active profile** from `~/.chroma/credentials`
+4. **Interactive prompts** (if needed)
+
+## Sample App Configuration
+
+Installed sample apps include a `config.json` file:
+
+```json sample_app/config.json
+{
+  "required_env_variables": [
+    {
+      "name": "OPENAI_API_KEY",
+      "secret": true
+    }
+  ],
+  "optional_env_variables": [
+    {
+      "name": "LOG_LEVEL",
+      "secret": false
+    }
+  ],
+  "startup_commands": {
+    "Python": "python app.py",
+    "Install dependencies": "pip install -r requirements.txt"
+  }
+}
+```
+
+The installer creates a `.env` file with:
+
+```bash sample_app/.env
+CHROMA_API_KEY=your-api-key
+CHROMA_DATABASE=your-database
+CHROMA_TENANT=your-tenant-id
+OPENAI_API_KEY=  # Set by user during installation
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Protect Credentials File">
+The `~/.chroma/credentials` file contains sensitive API keys. Ensure it has restricted permissions:
+
+```bash
+chmod 600 ~/.chroma/credentials
+```
+</Accordion>
+
+<Accordion title="Use Separate Profiles">
+Create separate profiles for development, staging, and production:
+
+```bash
+chroma login --profile development
+chroma login --profile production
+```
+</Accordion>
+
+<Accordion title="Environment Variables in CI/CD">
+For automated deployments, use environment variables instead of profiles:
+
+```bash
+export CHROMA_API_KEY=${{ secrets.CHROMA_API_KEY }}
+export CHROMA_TENANT=${{ secrets.CHROMA_TENANT }}
+export CHROMA_DATABASE=production-db
+```
+</Accordion>
+
+<Accordion title="Rotate API Keys">
+Regularly rotate your API keys and update profiles:
+
+```bash
+# Log in with new credentials
+chroma login --profile my-team
+
+# Or update via Chroma Cloud dashboard
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Troubleshooting
+
+### Reset Configuration
+
+To reset CLI configuration:
+
+```bash
+rm -rf ~/.chroma
+chroma login  # Reconfigure
+```
+
+### View Configuration
+
+```bash
+# Show current profile
+chroma profile show
+
+# List all profiles
+chroma profile list
+
+# View config file
+cat ~/.chroma/config.json
+```
+
+### Profile Not Found
+
+If you see "No current profile found":
+
+```bash
+# Login to create a profile
+chroma login
+
+# Or set an existing profile
+chroma profile use my-team
+```
+
+### Connection Issues
+
+Verify your credentials:
+
+```bash
+# Test connection by listing databases
+chroma db list
+
+# Verify environment variables
+echo $CHROMA_API_KEY
+```
+
+## Configuration Examples
+
+### Multi-Environment Setup
+
+```bash
+# Development profile
+chroma login --profile dev
+chroma profile use dev
+
+# Production profile
+chroma login --profile prod
+chroma profile use prod
+
+# Switch between environments
+chroma profile use dev    # Work on dev
+chroma profile use prod   # Deploy to prod
+```
+
+### Team Collaboration
+
+```bash
+# Each team member logs in
+chroma login --profile company-team
+
+# Share database names (not credentials)
+chroma db list
+chroma db connect shared-db --env-file
+```
+
+### Local Development
+
+```bash
+# Run local server
+chroma run --path ./dev-data
+
+# In another terminal, browse collections
+chroma browse my_collection --local
+
+# Copy to cloud when ready
+chroma copy --from-local --to-cloud --all --db staging
+```
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="Login" icon="right-to-bracket" href="/api/cli/commands#login">
+    Authenticate with Chroma Cloud
+  </Card>
+  <Card title="Profile Management" icon="user" href="/api/cli/commands#profile">
+    Manage multiple profiles
+  </Card>
+  <Card title="Database Commands" icon="database" href="/api/cli/commands#db-database-management">
+    Create and manage databases
+  </Card>
+  <Card title="CLI Commands" icon="terminal" href="/api/cli/commands">
+    Full command reference
+  </Card>
+</CardGroup>

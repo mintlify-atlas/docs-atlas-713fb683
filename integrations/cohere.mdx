@@ -1,0 +1,280 @@
+---
+title: Cohere embeddings
+description: Use Cohere's multilingual embedding models with Chroma for global semantic search
+---
+
+Chroma integrates with [Cohere](https://cohere.com)'s powerful embedding models, offering excellent multilingual support and semantic understanding.
+
+## Installation
+
+<CodeGroup>
+```bash Python
+pip install chromadb cohere
+```
+
+```bash JavaScript
+npm install chromadb cohere-ai
+```
+</CodeGroup>
+
+## Python usage
+
+### Basic setup
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import CohereEmbeddingFunction
+import os
+
+# Set your API key
+os.environ["COHERE_API_KEY"] = "your-api-key"
+
+# Create embedding function
+embedding_function = CohereEmbeddingFunction(
+    api_key=os.environ["COHERE_API_KEY"],
+    model_name="embed-english-v3.0"
+)
+
+# Create client and collection
+client = chromadb.Client()
+collection = client.create_collection(
+    name="cohere_embeddings",
+    embedding_function=embedding_function
+)
+
+# Add documents
+collection.add(
+    documents=["This is a document", "Another document"],
+    ids=["doc1", "doc2"]
+)
+
+# Query
+results = collection.query(
+    query_texts=["search query"],
+    n_results=2
+)
+```
+
+### Available models
+
+<Tabs>
+  <Tab title="English models">
+    ```python
+    # embed-english-v3.0 (recommended)
+    # Dimensions: 1024
+    # Best for English content
+    embedding_function = CohereEmbeddingFunction(
+        model_name="embed-english-v3.0"
+    )
+
+    # embed-english-light-v3.0
+    # Dimensions: 384
+    # Faster and more efficient
+    embedding_function = CohereEmbeddingFunction(
+        model_name="embed-english-light-v3.0"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Multilingual models">
+    ```python
+    # embed-multilingual-v3.0 (recommended)
+    # Dimensions: 1024
+    # Supports 100+ languages
+    embedding_function = CohereEmbeddingFunction(
+        model_name="embed-multilingual-v3.0"
+    )
+
+    # embed-multilingual-light-v3.0
+    # Dimensions: 384
+    # Faster multilingual embeddings
+    embedding_function = CohereEmbeddingFunction(
+        model_name="embed-multilingual-light-v3.0"
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Input types
+
+Cohere models support different input types for optimized embeddings:
+
+```python
+# For search documents
+embedding_function = CohereEmbeddingFunction(
+    api_key=os.environ["COHERE_API_KEY"],
+    model_name="embed-english-v3.0",
+    input_type="search_document"  # Optimize for document indexing
+)
+
+collection = client.create_collection(
+    name="documents",
+    embedding_function=embedding_function
+)
+
+# Add documents with optimized embeddings
+collection.add(
+    documents=["Document content"],
+    ids=["doc1"]
+)
+
+# For search queries, use search_query input type
+query_embedding_function = CohereEmbeddingFunction(
+    api_key=os.environ["COHERE_API_KEY"],
+    model_name="embed-english-v3.0",
+    input_type="search_query"  # Optimize for queries
+)
+```
+
+### Multilingual search
+
+```python
+# Create multilingual collection
+embedding_function = CohereEmbeddingFunction(
+    model_name="embed-multilingual-v3.0"
+)
+
+collection = client.create_collection(
+    name="multilingual_docs",
+    embedding_function=embedding_function
+)
+
+# Add documents in different languages
+collection.add(
+    documents=[
+        "Hello world",  # English
+        "Hola mundo",   # Spanish
+        "Bonjour le monde",  # French
+        "こんにちは世界"  # Japanese
+    ],
+    ids=["en", "es", "fr", "ja"]
+)
+
+# Query in any language
+results = collection.query(
+    query_texts=["greetings"],
+    n_results=4
+)
+```
+
+## JavaScript usage
+
+```javascript
+import { ChromaClient } from "chromadb";
+import { CohereEmbeddingFunction } from "chromadb";
+
+const embedder = new CohereEmbeddingFunction({
+  cohere_api_key: "your-api-key",
+  model: "embed-english-v3.0"
+});
+
+const client = new ChromaClient();
+const collection = await client.createCollection({
+  name: "cohere_collection",
+  embeddingFunction: embedder
+});
+
+// Add and query documents
+await collection.add({
+  ids: ["id1", "id2"],
+  documents: ["Document 1", "Document 2"]
+});
+
+const results = await collection.query({
+  queryTexts: ["search query"],
+  nResults: 2
+});
+```
+
+## Configuration
+
+<ParamField path="api_key" type="string" required>
+  Your Cohere API key
+</ParamField>
+
+<ParamField path="model_name" type="string" default="embed-english-v3.0">
+  Cohere embedding model to use
+</ParamField>
+
+<ParamField path="input_type" type="string">
+  Input type: `search_document`, `search_query`, `classification`, or `clustering`
+</ParamField>
+
+<ParamField path="truncate" type="string">
+  Truncation strategy: `NONE`, `START`, or `END`
+</ParamField>
+
+## Input types explained
+
+<AccordionGroup>
+  <Accordion title="search_document">
+    Use when indexing documents into your search system. Optimizes embeddings for being searched against.
+  </Accordion>
+  
+  <Accordion title="search_query">
+    Use when embedding search queries. Optimizes embeddings for finding relevant documents.
+  </Accordion>
+  
+  <Accordion title="classification">
+    Use when using embeddings for classification tasks.
+  </Accordion>
+  
+  <Accordion title="clustering">
+    Use when performing clustering analysis on embeddings.
+  </Accordion>
+</AccordionGroup>
+
+## Supported languages
+
+Cohere's multilingual models support over 100 languages including:
+
+- **European**: English, Spanish, French, German, Italian, Portuguese, Russian, Polish, Dutch, Czech, etc.
+- **Asian**: Chinese, Japanese, Korean, Hindi, Thai, Vietnamese, Indonesian, etc.
+- **Middle Eastern**: Arabic, Hebrew, Turkish, Farsi, etc.
+- **Other**: See [Cohere's language support documentation](https://docs.cohere.com/docs/supported-languages) for the full list
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use the right model" icon="language">
+    Use multilingual models only if you need multi-language support. English models are faster for English-only content.
+  </Card>
+  <Card title="Specify input types" icon="tag">
+    Always specify `input_type` for better embedding quality. Use `search_document` for indexing and `search_query` for queries.
+  </Card>
+  <Card title="Batch efficiently" icon="layer-group">
+    Cohere supports up to 96 texts per request. Batch your requests for better performance.
+  </Card>
+  <Card title="Monitor usage" icon="chart-line">
+    Track your API usage through the Cohere dashboard.
+  </Card>
+</CardGroup>
+
+## Error handling
+
+```python
+import time
+from cohere.errors import RateLimitError, AuthenticationError
+
+try:
+    collection.add(
+        documents=["document"],
+        ids=["id1"]
+    )
+except RateLimitError:
+    # Handle rate limit
+    time.sleep(60)  # Wait before retrying
+except AuthenticationError:
+    print("Invalid API key")
+```
+
+## Resources
+
+- [Cohere Embeddings Documentation](https://docs.cohere.com/docs/embeddings)
+- [Cohere Models](https://docs.cohere.com/docs/models)
+- [Cohere Pricing](https://cohere.com/pricing)
+- [Language Support](https://docs.cohere.com/docs/supported-languages)
+
+<Tip>
+**Free tier**: Cohere offers a generous free tier for experimentation. Perfect for getting started with multilingual search.
+</Tip>

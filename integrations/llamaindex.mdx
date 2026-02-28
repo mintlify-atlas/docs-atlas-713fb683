@@ -1,0 +1,180 @@
+---
+title: LlamaIndex integration
+description: Use Chroma as a vector store with LlamaIndex for building data-driven LLM applications
+---
+
+Chroma provides native integration with [LlamaIndex](https://www.llamaindex.ai/) (formerly GPT Index), enabling you to build powerful data-driven LLM applications.
+
+## Installation
+
+```bash
+pip install chromadb llama-index llama-index-vector-stores-chroma
+```
+
+## Basic usage
+
+```python
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
+from llama_index.vector_stores.chroma import ChromaVectorStore
+import chromadb
+
+# Load documents
+documents = SimpleDirectoryReader("./data").load_data()
+
+# Create Chroma client and collection
+chroma_client = chromadb.EphemeralClient()
+chroma_collection = chroma_client.create_collection("quickstart")
+
+# Create vector store
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+# Build index
+index = VectorStoreIndex.from_documents(
+    documents,
+    storage_context=storage_context
+)
+
+# Query the index
+query_engine = index.as_query_engine()
+response = query_engine.query("What is this document about?")
+print(response)
+```
+
+## Using persistent storage
+
+```python
+import chromadb
+from llama_index.vector_stores.chroma import ChromaVectorStore
+
+# Create persistent client
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
+
+# Get or create collection
+chroma_collection = chroma_client.get_or_create_collection("my_collection")
+
+# Create vector store
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+```
+
+## Using with a remote server
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+# Connect to remote Chroma server
+chroma_client = chromadb.HttpClient(
+    host="localhost",
+    port=8000,
+    settings=Settings(allow_reset=True, anonymized_telemetry=False)
+)
+
+chroma_collection = chroma_client.get_or_create_collection("my_collection")
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+```
+
+## Advanced querying
+
+### Metadata filtering
+
+```python
+from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
+
+# Query with metadata filters
+filters = MetadataFilters(
+    filters=[ExactMatchFilter(key="source", value="documentation")]
+)
+
+query_engine = index.as_query_engine(filters=filters)
+response = query_engine.query("Your question")
+```
+
+### Custom retrievers
+
+```python
+from llama_index.core.retrievers import VectorIndexRetriever
+
+# Create custom retriever
+retriever = VectorIndexRetriever(
+    index=index,
+    similarity_top_k=5,
+)
+
+# Retrieve nodes
+nodes = retriever.retrieve("query text")
+```
+
+## Loading existing collections
+
+```python
+import chromadb
+from llama_index.core import VectorStoreIndex
+from llama_index.vector_stores.chroma import ChromaVectorStore
+
+# Connect to existing collection
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
+chroma_collection = chroma_client.get_collection("existing_collection")
+
+# Load from vector store
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+index = VectorStoreIndex.from_vector_store(vector_store)
+```
+
+## Configuration options
+
+<ParamField path="chroma_collection" type="Collection" required>
+  Chroma collection instance
+</ParamField>
+
+<ParamField path="host" type="string">
+  Chroma server host (for HttpClient)
+</ParamField>
+
+<ParamField path="port" type="int">
+  Chroma server port (for HttpClient)
+</ParamField>
+
+<ParamField path="path" type="string">
+  Path for persistent storage (for PersistentClient)
+</ParamField>
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Document indexing" icon="file-magnifying-glass">
+    Index large document collections for retrieval
+  </Card>
+  <Card title="Knowledge graphs" icon="diagram-project">
+    Build knowledge graphs with vector embeddings
+  </Card>
+  <Card title="Multi-modal search" icon="images">
+    Search across text, images, and other modalities
+  </Card>
+  <Card title="Agents" icon="robot">
+    Build LLM agents with memory backed by Chroma
+  </Card>
+</CardGroup>
+
+## Best practices
+
+<Accordion title="Choose the right client">
+  - Use `EphemeralClient` for testing and prototyping
+  - Use `PersistentClient` for local development with persistence
+  - Use `HttpClient` for production client-server deployments
+</Accordion>
+
+<Accordion title="Optimize for performance">
+  - Batch document insertions for better performance
+  - Use appropriate chunk sizes for your documents
+  - Configure HNSW index parameters for your use case
+</Accordion>
+
+## Resources
+
+- [LlamaIndex Chroma Documentation](https://docs.llamaindex.ai/en/stable/examples/vector_stores/ChromaIndexDemo/)
+- [LlamaIndex Vector Store Guide](https://docs.llamaindex.ai/en/stable/module_guides/storing/vector_stores/)
+
+<Note>
+LlamaIndex handles document chunking and embedding automatically, making it easy to get started with Chroma.
+</Note>

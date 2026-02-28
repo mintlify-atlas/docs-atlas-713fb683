@@ -1,0 +1,698 @@
+---
+title: Client
+description: JavaScript client API reference for ChromaClient, CloudClient, and AdminClient
+---
+
+## ChromaClient
+
+The main client for interacting with Chroma. Manages collections and provides access to the database.
+
+### Constructor
+
+```typescript
+new ChromaClient(params?: ChromaClientParams)
+```
+
+**Parameters:**
+
+<ParamField path="params" type="ChromaClientParams" optional>
+  Client configuration options
+  
+  <Expandable title="ChromaClientParams properties">
+    <ParamField path="path" type="string" default="http://localhost:8000">
+      The base URL for the Chroma API server
+    </ParamField>
+    
+    <ParamField path="fetchOptions" type="RequestInit" optional>
+      Additional fetch options for HTTP requests
+    </ParamField>
+    
+    <ParamField path="auth" type="AuthOptions" optional>
+      Authentication configuration
+    </ParamField>
+    
+    <ParamField path="tenant" type="string" default="default_tenant">
+      The tenant to use
+    </ParamField>
+    
+    <ParamField path="database" type="string" default="default_database">
+      The database to use
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+const client = new ChromaClient({
+  path: "http://localhost:8000"
+});
+```
+
+### Collection Methods
+
+#### createCollection
+
+Creates a new collection with the specified properties.
+
+```typescript
+await client.createCollection(params: CreateCollectionParams): Promise<Collection>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="CreateCollectionParams" required>
+  <Expandable title="CreateCollectionParams properties">
+    <ParamField path="name" type="string" required>
+      The name of the collection
+    </ParamField>
+    
+    <ParamField path="metadata" type="CollectionMetadata" optional>
+      Optional metadata associated with the collection
+    </ParamField>
+    
+    <ParamField path="embeddingFunction" type="IEmbeddingFunction" optional>
+      Custom embedding function for the collection. Defaults to DefaultEmbeddingFunction
+    </ParamField>
+    
+    <ParamField path="configuration" type="CreateCollectionConfiguration" optional>
+      Collection configuration options
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the created Collection instance
+
+**Throws:** 
+- `ChromaConnectionError` - If unable to connect to the server
+- `ChromaServerError` - If there is an issue creating the collection
+
+**Example:**
+
+```typescript
+const collection = await client.createCollection({
+  name: "my_collection",
+  metadata: {
+    "description": "My first collection"
+  }
+});
+```
+
+#### getCollection
+
+Gets an existing collection with the specified name.
+
+```typescript
+await client.getCollection(params: GetCollectionParams): Promise<Collection>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="GetCollectionParams" required>
+  <Expandable title="GetCollectionParams properties">
+    <ParamField path="name" type="string" required>
+      The name of the collection
+    </ParamField>
+    
+    <ParamField path="embeddingFunction" type="IEmbeddingFunction" optional>
+      Optional custom embedding function for the collection
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the Collection instance
+
+**Throws:** `Error` if the collection does not exist or there is an issue getting it
+
+**Example:**
+
+```typescript
+const collection = await client.getCollection({
+  name: "my_collection"
+});
+```
+
+#### getOrCreateCollection
+
+Gets or creates a collection with the specified properties.
+
+```typescript
+await client.getOrCreateCollection(params: GetOrCreateCollectionParams): Promise<Collection>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="GetOrCreateCollectionParams" required>
+  Same as CreateCollectionParams
+</ParamField>
+
+**Returns:** Promise resolving to the got or created Collection instance
+
+**Throws:** `Error` if there is an issue getting or creating the collection
+
+**Example:**
+
+```typescript
+const collection = await client.getOrCreateCollection({
+  name: "my_collection",
+  metadata: {
+    "description": "My first collection"
+  }
+});
+```
+
+#### deleteCollection
+
+Deletes a collection with the specified name.
+
+```typescript
+await client.deleteCollection(params: DeleteCollectionParams): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="DeleteCollectionParams" required>
+  <Expandable title="DeleteCollectionParams properties">
+    <ParamField path="name" type="string" required>
+      The name of the collection to delete
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves when the collection is deleted
+
+**Throws:** `Error` if there is an issue deleting the collection
+
+**Example:**
+
+```typescript
+await client.deleteCollection({
+  name: "my_collection"
+});
+```
+
+#### listCollections
+
+Get all collection names.
+
+```typescript
+await client.listCollections(params?: ListCollectionsParams): Promise<string[]>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="ListCollectionsParams" optional>
+  <Expandable title="ListCollectionsParams properties">
+    <ParamField path="limit" type="number" optional>
+      Optional limit on the number of items to get
+    </ParamField>
+    
+    <ParamField path="offset" type="number" optional>
+      Optional offset on the items to get
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to a list of collection names
+
+**Example:**
+
+```typescript
+const collections = await client.listCollections({
+  limit: 10,
+  offset: 0
+});
+```
+
+#### listCollectionsAndMetadata
+
+List collection names, IDs, and metadata.
+
+```typescript
+await client.listCollectionsAndMetadata(params?: ListCollectionsParams): Promise<{
+  name: string;
+  id: string;
+  metadata?: CollectionMetadata;
+}[]>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="ListCollectionsParams" optional>
+  Same as listCollections
+</ParamField>
+
+**Returns:** Promise resolving to a list of collection names, IDs, and metadata
+
+**Example:**
+
+```typescript
+const collections = await client.listCollectionsAndMetadata({
+  limit: 10,
+  offset: 0
+});
+```
+
+#### countCollections
+
+Counts all collections.
+
+```typescript
+await client.countCollections(): Promise<number>
+```
+
+**Returns:** Promise resolving to the number of collections
+
+**Example:**
+
+```typescript
+const count = await client.countCollections();
+```
+
+### Utility Methods
+
+#### version
+
+Returns the version of the Chroma API.
+
+```typescript
+await client.version(): Promise<string>
+```
+
+**Returns:** Promise resolving to the version of the Chroma API
+
+**Throws:** `ChromaConnectionError` if unable to connect to the server
+
+**Example:**
+
+```typescript
+const version = await client.version();
+```
+
+#### heartbeat
+
+Returns a heartbeat from the Chroma API.
+
+```typescript
+await client.heartbeat(): Promise<number>
+```
+
+**Returns:** Promise resolving to the heartbeat in nanoseconds
+
+**Throws:** `ChromaConnectionError` if unable to connect to the server
+
+**Example:**
+
+```typescript
+const heartbeat = await client.heartbeat();
+```
+
+#### reset
+
+Resets the state of the database.
+
+```typescript
+await client.reset(): Promise<boolean>
+```
+
+**Returns:** Promise that resolves when the reset operation is complete
+
+**Throws:** 
+- `ChromaConnectionError` - If unable to connect to the server
+- `ChromaServerError` - If the server experienced an error
+
+**Example:**
+
+```typescript
+await client.reset();
+```
+
+## CloudClient
+
+A client for connecting to Chroma Cloud. Extends ChromaClient with cloud-specific configuration.
+
+### Constructor
+
+```typescript
+new CloudClient(params: CloudClientParams)
+```
+
+**Parameters:**
+
+<ParamField path="params" type="CloudClientParams" required>
+  <Expandable title="CloudClientParams properties">
+    <ParamField path="apiKey" type="string" optional>
+      Your Chroma Cloud API key. If not provided, uses the `CHROMA_API_KEY` environment variable
+    </ParamField>
+    
+    <ParamField path="database" type="string" optional>
+      The database to use
+    </ParamField>
+    
+    <ParamField path="tenant" type="string" optional>
+      The tenant to use
+    </ParamField>
+    
+    <ParamField path="cloudHost" type="string" default="https://api.trychroma.com">
+      The Chroma Cloud host URL
+    </ParamField>
+    
+    <ParamField path="cloudPort" type="string" default="8000">
+      The Chroma Cloud port
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Throws:** `Error` if no API key is provided and `CHROMA_API_KEY` environment variable is not set
+
+**Example:**
+
+```typescript
+const client = new CloudClient({
+  apiKey: "your-api-key",
+  database: "my_database"
+});
+```
+
+<Note>
+CloudClient inherits all methods from ChromaClient. See the ChromaClient documentation above for available methods.
+</Note>
+
+## AdminClient
+
+A client for administrative operations like managing tenants and databases.
+
+### Constructor
+
+```typescript
+new AdminClient(params?: AdminClientParams)
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" optional>
+  <Expandable title="AdminClientParams properties">
+    <ParamField path="path" type="string" default="http://localhost:8000">
+      The base URL for the Chroma API server
+    </ParamField>
+    
+    <ParamField path="fetchOptions" type="RequestInit" optional>
+      Additional fetch options for HTTP requests
+    </ParamField>
+    
+    <ParamField path="auth" type="AuthOptions" optional>
+      Authentication configuration
+    </ParamField>
+    
+    <ParamField path="tenant" type="string" default="default_tenant">
+      The tenant to use
+    </ParamField>
+    
+    <ParamField path="database" type="string" default="default_database">
+      The database to use
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+const adminClient = new AdminClient({
+  path: "http://localhost:8000"
+});
+```
+
+### Tenant Methods
+
+#### createTenant
+
+Creates a new tenant.
+
+```typescript
+await adminClient.createTenant(params: { name: string }): Promise<Tenant>
+```
+
+**Parameters:**
+
+<ParamField path="params.name" type="string" required>
+  The name of the tenant to create
+</ParamField>
+
+**Returns:** Promise resolving to the created tenant
+
+**Throws:** `Error` if there is an issue creating the tenant
+
+**Example:**
+
+```typescript
+await adminClient.createTenant({
+  name: "my_tenant"
+});
+```
+
+#### getTenant
+
+Gets a tenant by name.
+
+```typescript
+await adminClient.getTenant(params: { name: string }): Promise<Tenant>
+```
+
+**Parameters:**
+
+<ParamField path="params.name" type="string" required>
+  The name of the tenant to get
+</ParamField>
+
+**Returns:** Promise resolving to the tenant
+
+**Throws:** `Error` if there is an issue getting the tenant
+
+**Example:**
+
+```typescript
+const tenant = await adminClient.getTenant({
+  name: "my_tenant"
+});
+```
+
+#### setTenant
+
+Sets the tenant and database for the client.
+
+```typescript
+await adminClient.setTenant(params: { tenant: string; database?: string }): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="tenant" type="string" required>
+      The name of the tenant
+    </ParamField>
+    
+    <ParamField path="database" type="string" optional>
+      The name of the database
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves when complete
+
+**Throws:** `Error` if there is an issue
+
+**Example:**
+
+```typescript
+await adminClient.setTenant({
+  tenant: "my_tenant",
+  database: "my_database"
+});
+```
+
+### Database Methods
+
+#### createDatabase
+
+Creates a new database.
+
+```typescript
+await adminClient.createDatabase(params: {
+  name: string;
+  tenantName: string;
+}): Promise<{ name: string }>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="name" type="string" required>
+      The name of the database to create
+    </ParamField>
+    
+    <ParamField path="tenantName" type="string" required>
+      The name of the tenant
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the created database
+
+**Throws:** `Error` if there is an issue creating the database
+
+**Example:**
+
+```typescript
+await adminClient.createDatabase({
+  name: "my_database",
+  tenantName: "my_tenant"
+});
+```
+
+#### getDatabase
+
+Gets a database by name.
+
+```typescript
+await adminClient.getDatabase(params: {
+  name: string;
+  tenantName: string;
+}): Promise<Database>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="name" type="string" required>
+      The name of the database to get
+    </ParamField>
+    
+    <ParamField path="tenantName" type="string" required>
+      The name of the tenant
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the database
+
+**Throws:** `Error` if there is an issue getting the database
+
+**Example:**
+
+```typescript
+const database = await adminClient.getDatabase({
+  name: "my_database",
+  tenantName: "my_tenant"
+});
+```
+
+#### deleteDatabase
+
+Deletes a database.
+
+```typescript
+await adminClient.deleteDatabase(params: {
+  name: string;
+  tenantName: string;
+}): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="name" type="string" required>
+      The name of the database to delete
+    </ParamField>
+    
+    <ParamField path="tenantName" type="string" required>
+      The name of the tenant
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves when complete
+
+**Throws:** `Error` if there is an issue deleting the database
+
+**Example:**
+
+```typescript
+await adminClient.deleteDatabase({
+  name: "my_database",
+  tenantName: "my_tenant"
+});
+```
+
+#### listDatabases
+
+Lists databases for a specific tenant.
+
+```typescript
+await adminClient.listDatabases(params: {
+  tenantName: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Database[]>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="tenantName" type="string" required>
+      The name of the tenant
+    </ParamField>
+    
+    <ParamField path="limit" type="number" optional>
+      The maximum number of databases to return
+    </ParamField>
+    
+    <ParamField path="offset" type="number" optional>
+      The number of databases to skip
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to a list of databases
+
+**Throws:** `Error` if there is an issue listing the databases
+
+**Example:**
+
+```typescript
+const databases = await adminClient.listDatabases({
+  tenantName: "my_tenant",
+  limit: 10,
+  offset: 0
+});
+```
+
+#### setDatabase
+
+Sets the database for the client.
+
+```typescript
+await adminClient.setDatabase(params: { database?: string }): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params.database" type="string" optional>
+  The name of the database
+</ParamField>
+
+**Returns:** Promise that resolves when complete
+
+**Throws:** `Error` if there is an issue
+
+**Example:**
+
+```typescript
+await adminClient.setDatabase({
+  database: "my_database"
+});
+```

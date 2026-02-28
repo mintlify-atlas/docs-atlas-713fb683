@@ -1,0 +1,552 @@
+---
+title: Collection API
+description: Collection methods for adding, querying, and managing documents
+---
+
+The Collection API provides methods for working with documents and embeddings in a collection.
+
+## Document Operations
+
+### add()
+
+Add records to the collection.
+
+<CodeGroup>
+```python With Documents
+collection.add(
+    ids=["id1", "id2", "id3"],
+    documents=["doc1", "doc2", "doc3"],
+    metadatas=[{"type": "article"}, {"type": "blog"}, {"type": "paper"}]
+)
+```
+
+```python With Embeddings
+collection.add(
+    ids=["id1", "id2"],
+    embeddings=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+    metadatas=[{"type": "article"}, {"type": "blog"}]
+)
+```
+
+```python With Images
+import numpy as np
+
+image = np.array([[255, 0, 0], [0, 255, 0]])
+collection.add(
+    ids=["img1"],
+    images=[image]
+)
+```
+</CodeGroup>
+
+<ParamField path="ids" type="str | List[str]" required>
+  Record IDs to add. Must be unique within the collection.
+</ParamField>
+
+<ParamField path="embeddings" type="List[float] | List[List[float]]" optional>
+  Embeddings to add. If None, embeddings are computed from documents/images using the collection's embedding function.
+</ParamField>
+
+<ParamField path="metadatas" type="Dict | List[Dict]" optional>
+  Optional metadata for each record.
+</ParamField>
+
+<ParamField path="documents" type="str | List[str]" optional>
+  Optional documents for each record.
+</ParamField>
+
+<ParamField path="images" type="ndarray | List[ndarray]" optional>
+  Optional images for each record.
+</ParamField>
+
+<ParamField path="uris" type="str | List[str]" optional>
+  Optional URIs for loading images.
+</ParamField>
+
+<ResponseField name="raises" type="ValueError">
+  - If both embeddings and documents/images are missing
+  - If lengths of provided fields do not match
+  - If an ID already exists
+</ResponseField>
+
+<Note>
+  Either provide `embeddings` OR provide `documents`/`images` to be embedded. You cannot provide both.
+</Note>
+
+---
+
+### get()
+
+Retrieve records from the collection.
+
+<CodeGroup>
+```python Get by IDs
+results = collection.get(
+    ids=["id1", "id2"],
+    include=["documents", "metadatas"]
+)
+```
+
+```python Get with Filters
+results = collection.get(
+    where={"type": "article"},
+    limit=10
+)
+```
+
+```python Get with Document Filters
+results = collection.get(
+    where_document={"$contains": "machine learning"},
+    limit=5
+)
+```
+</CodeGroup>
+
+<ParamField path="ids" type="List[str]" optional>
+  If provided, only return records with these IDs.
+</ParamField>
+
+<ParamField path="where" type="Where" optional>
+  A Where filter used to filter based on metadata values.
+</ParamField>
+
+<ParamField path="limit" type="int" optional>
+  Maximum number of results to return.
+</ParamField>
+
+<ParamField path="offset" type="int" optional>
+  Number of results to skip before returning.
+</ParamField>
+
+<ParamField path="where_document" type="WhereDocument" optional>
+  A WhereDocument filter used to filter based on document content.
+</ParamField>
+
+<ParamField path="include" type="List[str]" default='["metadatas", "documents"]'>
+  Fields to include in results. Can contain `"embeddings"`, `"metadatas"`, `"documents"`, `"uris"`.
+</ParamField>
+
+<ResponseField name="return" type="GetResult">
+  Retrieved records and requested fields as a GetResult object with:
+  - `ids`: List of IDs
+  - `documents`: Optional list of documents
+  - `metadatas`: Optional list of metadata
+  - `embeddings`: Optional list of embeddings
+  - `uris`: Optional list of URIs
+</ResponseField>
+
+---
+
+### query()
+
+Query for the K nearest neighbor records.
+
+<CodeGroup>
+```python Query with Embeddings
+results = collection.query(
+    query_embeddings=[[0.1, 0.2, 0.3]],
+    n_results=10
+)
+```
+
+```python Query with Text
+results = collection.query(
+    query_texts=["machine learning"],
+    n_results=10,
+    where={"type": "article"}
+)
+```
+
+```python Batch Query
+results = collection.query(
+    query_texts=["query1", "query2", "query3"],
+    n_results=5,
+    include=["documents", "distances"]
+)
+```
+
+```python Query with Filters
+results = collection.query(
+    query_texts=["AI safety"],
+    n_results=10,
+    where={"year": {"$gte": 2020}},
+    where_document={"$contains": "alignment"}
+)
+```
+</CodeGroup>
+
+<ParamField path="query_embeddings" type="List[float] | List[List[float]]" optional>
+  Raw embeddings to query for.
+</ParamField>
+
+<ParamField path="query_texts" type="str | List[str]" optional>
+  Documents to embed and query against using the collection's embedding function.
+</ParamField>
+
+<ParamField path="query_images" type="ndarray | List[ndarray]" optional>
+  Images to embed and query against.
+</ParamField>
+
+<ParamField path="query_uris" type="str | List[str]" optional>
+  URIs to be loaded and embedded.
+</ParamField>
+
+<ParamField path="ids" type="List[str]" optional>
+  Optional subset of IDs to search within.
+</ParamField>
+
+<ParamField path="n_results" type="int" default="10">
+  Number of neighbors to return per query.
+</ParamField>
+
+<ParamField path="where" type="Where" optional>
+  Metadata filter.
+</ParamField>
+
+<ParamField path="where_document" type="WhereDocument" optional>
+  Document content filter.
+</ParamField>
+
+<ParamField path="include" type="List[str]" default='["metadatas", "documents", "distances"]'>
+  Fields to include in results. Can contain `"embeddings"`, `"metadatas"`, `"documents"`, `"uris"`, `"distances"`.
+</ParamField>
+
+<ResponseField name="return" type="QueryResult">
+  Nearest neighbor results in batched format:
+  - `ids`: List of lists of IDs (one list per query)
+  - `documents`: Optional list of lists of documents
+  - `metadatas`: Optional list of lists of metadata
+  - `embeddings`: Optional list of lists of embeddings
+  - `distances`: Optional list of lists of distances
+</ResponseField>
+
+<ResponseField name="raises" type="ValueError">
+  - If no query input is provided
+  - If multiple query input types are provided
+</ResponseField>
+
+<Note>
+  This is a batch query API. Multiple queries can be performed at once by providing lists of query inputs.
+</Note>
+
+---
+
+### search()
+
+Perform hybrid search on the collection using the new Search API.
+
+<CodeGroup>
+```python Basic Search
+from chromadb.execution.expression import Search, K, Knn
+
+results = collection.search(
+    Search()
+        .where(K("category") == "science")
+        .rank(Knn(query=[0.1, 0.2, 0.3]))
+        .limit(10)
+        .select(K.DOCUMENT, K.SCORE)
+)
+```
+
+```python Hybrid Search with RRF
+from chromadb.execution.expression import Search, K, Knn, Rrf
+
+results = collection.search(
+    Search()
+        .where((K("status") == "active") & (K("year") > 2020))
+        .rank(Rrf([
+            Knn(query=[0.1, 0.2, 0.3], return_rank=True),
+            Knn(query="text query", key="sparse_embedding", return_rank=True)
+        ], k=60))
+        .limit(20)
+        .select(K.DOCUMENT, K.METADATA, K.SCORE)
+)
+```
+
+```python Batch Search
+from chromadb.execution.expression import Search, K, Knn
+
+searches = [
+    Search().where(K("type") == "article").rank(Knn(query=[0.1, 0.2])),
+    Search().where(K("type") == "paper").rank(Knn(query=[0.3, 0.4]))
+]
+
+results = collection.search(searches)
+```
+</CodeGroup>
+
+<ParamField path="searches" type="Search | List[Search]" required>
+  A single Search object or list of Search objects, each containing:
+  - `where`: Where expression for filtering
+  - `rank`: Ranking expression for hybrid search (defaults to Val(0.0))
+  - `limit`: Limit configuration for pagination
+  - `select`: Select configuration for keys to return
+</ParamField>
+
+<ParamField path="read_level" type="ReadLevel" default="ReadLevel.INDEX_AND_WAL">
+  Controls whether to read from the write-ahead log (WAL):
+  - `ReadLevel.INDEX_AND_WAL`: Read from both index and WAL (default, all writes visible)
+  - `ReadLevel.INDEX_ONLY`: Read only from index, skipping WAL (faster, may miss recent writes)
+</ParamField>
+
+<ResponseField name="return" type="SearchResult">
+  Column-major format response with:
+  - `ids`: List of result IDs for each search payload
+  - `documents`: Optional documents for each payload
+  - `embeddings`: Optional embeddings for each payload
+  - `metadatas`: Optional metadata for each payload
+  - `scores`: Optional scores for each payload
+  - `select`: List of selected keys for each payload
+  
+  Use `.rows()` method to convert to row-major format.
+</ResponseField>
+
+<Tip>
+  This is an experimental API for distributed and hosted Chroma. See [Search API](/api/python/search) for more details.
+</Tip>
+
+---
+
+### update()
+
+Update existing records by ID.
+
+<CodeGroup>
+```python Update Documents
+collection.update(
+    ids=["id1", "id2"],
+    documents=["updated doc1", "updated doc2"]
+)
+```
+
+```python Update Metadata
+collection.update(
+    ids=["id1"],
+    metadatas=[{"status": "reviewed", "score": 0.9}]
+)
+```
+
+```python Update Embeddings
+collection.update(
+    ids=["id1"],
+    embeddings=[[0.7, 0.8, 0.9]]
+)
+```
+</CodeGroup>
+
+<ParamField path="ids" type="str | List[str]" required>
+  Record IDs to update.
+</ParamField>
+
+<ParamField path="embeddings" type="List[float] | List[List[float]]" optional>
+  Updated embeddings. If None, embeddings are computed from documents/images.
+</ParamField>
+
+<ParamField path="metadatas" type="Dict | List[Dict]" optional>
+  Updated metadata.
+</ParamField>
+
+<ParamField path="documents" type="str | List[str]" optional>
+  Updated documents.
+</ParamField>
+
+<ParamField path="images" type="ndarray | List[ndarray]" optional>
+  Updated images.
+</ParamField>
+
+<ParamField path="uris" type="str | List[str]" optional>
+  Updated URIs for loading images.
+</ParamField>
+
+---
+
+### upsert()
+
+Create or update records by ID.
+
+```python
+collection.upsert(
+    ids=["id1", "id2", "id3"],
+    documents=["doc1", "doc2", "doc3"],
+    metadatas=[{"new": True}, {"new": True}, {"new": False}]
+)
+```
+
+<ParamField path="ids" type="str | List[str]" required>
+  Record IDs to upsert.
+</ParamField>
+
+<ParamField path="embeddings" type="List[float] | List[List[float]]" optional>
+  Embeddings to add or update. If None, embeddings are computed.
+</ParamField>
+
+<ParamField path="metadatas" type="Dict | List[Dict]" optional>
+  Metadata to add or update.
+</ParamField>
+
+<ParamField path="documents" type="str | List[str]" optional>
+  Documents to add or update.
+</ParamField>
+
+<ParamField path="images" type="ndarray | List[ndarray]" optional>
+  Images to add or update.
+</ParamField>
+
+<ParamField path="uris" type="str | List[str]" optional>
+  URIs for loading images.
+</ParamField>
+
+---
+
+### delete()
+
+Delete records by ID or filters.
+
+<CodeGroup>
+```python Delete by IDs
+collection.delete(ids=["id1", "id2"])
+```
+
+```python Delete by Metadata
+collection.delete(where={"status": "draft"})
+```
+
+```python Delete by Document Content
+collection.delete(
+    where_document={"$contains": "deprecated"}
+)
+```
+</CodeGroup>
+
+<ParamField path="ids" type="List[str]" optional>
+  Record IDs to delete.
+</ParamField>
+
+<ParamField path="where" type="Where" optional>
+  Metadata filter.
+</ParamField>
+
+<ParamField path="where_document" type="WhereDocument" optional>
+  Document content filter.
+</ParamField>
+
+<ResponseField name="raises" type="ValueError">
+  If no IDs or filters are provided.
+</ResponseField>
+
+<Warning>
+  All documents that match the filters will be permanently deleted.
+</Warning>
+
+---
+
+## Collection Utilities
+
+### count()
+
+Return the number of records in the collection.
+
+```python
+num_records = collection.count()
+print(f"Collection has {num_records} records")
+```
+
+<ResponseField name="return" type="int">
+  The number of records in the collection.
+</ResponseField>
+
+---
+
+### peek()
+
+Return the first N records from the collection.
+
+```python
+results = collection.peek(limit=5)
+```
+
+<ParamField path="limit" type="int" default="10">
+  Maximum number of records to return.
+</ParamField>
+
+<ResponseField name="return" type="GetResult">
+  Retrieved records with IDs, documents, metadatas, and embeddings.
+</ResponseField>
+
+---
+
+### get_indexing_status()
+
+Get the indexing status of the collection.
+
+```python
+status = collection.get_indexing_status()
+print(f"Indexed: {status.num_indexed_ops}/{status.total_ops}")
+print(f"Progress: {status.op_indexing_progress:.2%}")
+```
+
+<ResponseField name="return" type="IndexingStatus">
+  An object containing:
+  - `num_indexed_ops`: Number of user operations that have been indexed
+  - `num_unindexed_ops`: Number of user operations pending indexing
+  - `total_ops`: Total number of user operations in collection
+  - `op_indexing_progress`: Proportion of operations indexed (0.0 to 1.0)
+</ResponseField>
+
+---
+
+### modify()
+
+Update collection name, metadata, or configuration.
+
+<CodeGroup>
+```python Update Name
+collection.modify(name="new_collection_name")
+```
+
+```python Update Metadata
+collection.modify(
+    metadata={"description": "Updated description", "version": "2.0"}
+)
+```
+</CodeGroup>
+
+<ParamField path="name" type="str" optional>
+  New collection name.
+</ParamField>
+
+<ParamField path="metadata" type="CollectionMetadata" optional>
+  New metadata for the collection.
+</ParamField>
+
+<ParamField path="configuration" type="UpdateCollectionConfiguration" optional>
+  New configuration for the collection.
+</ParamField>
+
+---
+
+## Collection Properties
+
+### name
+
+Get the collection name.
+
+```python
+print(collection.name)
+```
+
+### id
+
+Get the collection UUID.
+
+```python
+print(collection.id)
+```
+
+### metadata
+
+Get the collection metadata.
+
+```python
+print(collection.metadata)
+```

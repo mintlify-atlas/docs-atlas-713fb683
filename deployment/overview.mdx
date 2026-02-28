@@ -1,0 +1,227 @@
+---
+title: Deployment Overview
+description: Understanding Chroma's deployment modes and choosing the right option for your use case
+---
+
+Chroma offers multiple deployment modes to suit different use cases, from local development to production-scale distributed systems.
+
+## Deployment Modes
+
+### In-Memory Mode (Ephemeral)
+
+The simplest way to use Chroma for testing and prototyping. All data is stored in memory and lost when the process ends.
+
+```python
+import chromadb
+
+client = chromadb.EphemeralClient()
+```
+
+**Use cases:**
+- Quick testing and experimentation
+- Temporary data that doesn't need persistence
+- Development and prototyping
+
+**Characteristics:**
+- No disk I/O
+- Fastest performance
+- Data is not persisted
+- Single process only
+
+### Persistent Mode
+
+Stores data on disk for local development with data persistence. Data survives process restarts.
+
+```python
+import chromadb
+
+client = chromadb.PersistentClient(path="./chroma_data")
+```
+
+**Use cases:**
+- Local development with persistent data
+- Small-scale applications
+- Single-machine deployments
+
+**Characteristics:**
+- Data persisted to disk
+- SQLite-based metadata storage
+- Local file-based storage
+- Single process recommended
+- Default path: `./chroma`
+
+### Client-Server Mode
+
+Connect to a Chroma server over HTTP. Recommended for production deployments.
+
+```python
+import chromadb
+
+client = chromadb.HttpClient(
+    host="localhost",
+    port=8000,
+    ssl=False,
+    headers={"Authorization": "Bearer token"}
+)
+```
+
+**Use cases:**
+- Production deployments
+- Multi-client access
+- Remote access to Chroma
+- Scalable workloads
+
+**Characteristics:**
+- Multiple clients can connect
+- Network-based communication
+- Supports authentication
+- Can be deployed with Docker, Kubernetes, or cloud providers
+
+### Distributed Mode
+
+A microservices-based architecture for production-scale deployments. Uses Kubernetes for orchestration.
+
+**Architecture components:**
+- **Frontend Service**: HTTP API endpoint (Rust-based)
+- **Query Service**: Handles vector similarity search
+- **Compaction Service**: Optimizes data storage
+- **Log Service**: Manages write-ahead log
+- **SysDB**: Metadata and catalog management
+- **Garbage Collector**: Cleans up unused data
+
+**Use cases:**
+- High-scale production deployments
+- Multi-tenant environments
+- High availability requirements
+- Geographic distribution
+
+**Characteristics:**
+- Kubernetes-native
+- Horizontally scalable
+- Service-based architecture
+- Production-grade observability
+- High availability
+
+## Choosing the Right Deployment
+
+| Mode | Development | Testing | Production | Multi-User | Scale |
+|------|-------------|---------|------------|------------|-------|
+| **In-Memory** | ✅ | ✅ | ❌ | ❌ | Small |
+| **Persistent** | ✅ | ✅ | ⚠️ | ⚠️ | Small |
+| **Client-Server** | ✅ | ✅ | ✅ | ✅ | Medium |
+| **Distributed** | ⚠️ | ✅ | ✅ | ✅ | Large |
+
+### Decision Tree
+
+**Start here: Do you need data persistence?**
+- **No** → Use In-Memory mode
+- **Yes** → Continue
+
+**Do you need multi-client access?**
+- **No** → Use Persistent mode
+- **Yes** → Continue
+
+**What's your expected scale?**
+- **< 1M vectors** → Use Client-Server mode with Docker
+- **1M - 100M vectors** → Use Client-Server mode with Kubernetes
+- **> 100M vectors** → Use Distributed mode
+
+## Local Development with Tilt
+
+For developers working on Chroma or testing distributed deployments locally, use Tilt:
+
+### Requirements
+
+- Docker
+- Local Kubernetes cluster:
+  - **macOS**: [OrbStack](https://orbstack.dev/)
+  - **Linux**: [Kind](https://kind.sigs.k8s.io/)
+- [Tilt](https://docs.tilt.dev/)
+- [Helm](https://helm.sh)
+
+### Setup
+
+1. **Start Kubernetes**
+   ```bash
+   # For OrbStack users: Navigate to Kubernetes → Pods and select "Turn On"
+   # For Kind users:
+   kind create cluster
+   ```
+
+2. **Start Distributed Chroma**
+   ```bash
+   # From the Chroma repository root
+   tilt up
+   ```
+
+3. **Access Services**
+   - Chroma API: http://localhost:8000
+   - Tilt Dashboard: http://localhost:10350
+
+4. **Clean Up**
+   ```bash
+   tilt down
+   ```
+
+### What Tilt Provides
+
+Tilt automatically:
+- Builds all service images from source
+- Deploys a complete distributed Chroma cluster
+- Sets up observability stack (Grafana, Jaeger, Prometheus)
+- Hot-reloads code changes
+- Exposes port forwards for all services
+
+**Service Ports:**
+- Frontend (HTTP): 8000
+- Query Service: 50053
+- Log Service: 50054
+- SysDB: 50051
+- Grafana: (via Tilt dashboard)
+- Jaeger: (via Tilt dashboard)
+
+<Note>
+  **Testing Requirement**: When running tests locally, make sure `tilt up` is running. Some distributed Chroma tests will fail without it.
+</Note>
+
+## Environment Variables
+
+Common environment variables across all deployment modes:
+
+```bash
+# Server Configuration
+CHROMA_HOST_ADDR=0.0.0.0
+CHROMA_HOST_PORT=8000
+CHROMA_WORKERS=1
+CHROMA_LOG_CONFIG=chromadb/log_config.yml
+CHROMA_TIMEOUT_KEEP_ALIVE=30
+
+# Persistence
+IS_PERSISTENT=TRUE
+
+# Authentication
+CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.basic_authn.BasicAuthenticationServerProvider
+CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=./server.htpasswd
+
+# Observability
+CHROMA_OTEL_COLLECTION_ENDPOINT=http://jaeger:4317
+CHROMA_OTEL_SERVICE_NAME=chromadb
+OTEL_EXPORTER_OTLP_HEADERS={"key":"value"}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy Chroma using Docker and Docker Compose
+  </Card>
+  <Card title="Kubernetes Deployment" icon="kubernetes" href="/deployment/kubernetes">
+    Deploy Chroma on Kubernetes using Helm
+  </Card>
+  <Card title="Cloud Providers" icon="cloud" href="/deployment/cloud-providers">
+    Deploy Chroma on AWS, GCP, or Azure
+  </Card>
+  <Card title="Configuration" icon="gear" href="/operations/configuration">
+    Learn about Chroma configuration options
+  </Card>
+</CardGroup>

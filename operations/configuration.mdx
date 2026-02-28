@@ -1,0 +1,344 @@
+---
+title: Configuration
+description: Configure Chroma server and client settings
+---
+
+## Overview
+
+Chroma provides extensive configuration options through the `Settings` class, environment variables, and YAML configuration files. This guide covers all configuration options available for both server and client deployments.
+
+## Configuration Methods
+
+Chroma can be configured in three ways:
+
+1. **Environment variables** - Set via `.env` file or system environment
+2. **Settings class** - Pass directly when creating a client
+3. **YAML configuration** - For advanced deployments
+
+### Using Environment Variables
+
+Create a `.env` file in your working directory:
+
+```bash
+# .env file
+CHROMA_SERVER_HOST=localhost
+CHROMA_SERVER_HTTP_PORT=8000
+IS_PERSISTENT=True
+PERSIST_DIRECTORY=./chroma_data
+ALLOW_RESET=False
+```
+
+Chroma automatically loads the `.env` file using UTF-8 encoding.
+
+### Using Settings Class
+
+Pass configuration directly when creating a client:
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+client = chromadb.Client(Settings(
+    chroma_api_impl="chromadb.api.rust.RustBindingsAPI",
+    is_persistent=True,
+    persist_directory="./chroma_data",
+    anonymized_telemetry=False
+))
+```
+
+## Configuration Options
+
+### Generic Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `environment` | `str` | `""` | Environment name for deployment tracking |
+| `chroma_api_impl` | `str` | `"chromadb.api.rust.RustBindingsAPI"` | API implementation to use. Options: `chromadb.api.rust.RustBindingsAPI`, `chromadb.api.segment.SegmentAPI`, `chromadb.api.fastapi.FastAPI` |
+| `chroma_server_nofile` | `int` | `None` | Maximum number of open file descriptors (Unix only) |
+| `chroma_server_thread_pool_size` | `int` | `40` | Thread pool size for synchronous FastAPI tasks |
+
+### Client Mode Settings
+
+For connecting to a remote Chroma server:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_server_host` | `str` | `None` | Hostname of the Chroma server |
+| `chroma_server_http_port` | `int` | `None` | HTTP port of the Chroma server |
+| `chroma_server_ssl_enabled` | `bool` | `False` | Enable SSL/TLS for server connections |
+| `chroma_server_ssl_verify` | `bool\|str` | `None` | SSL certificate verification. Can be `True`, `False`, or path to CA bundle |
+| `chroma_server_headers` | `Dict[str, str]` | `None` | Additional HTTP headers to send with requests |
+| `chroma_server_api_default_path` | `APIVersion` | `APIVersion.V2` | Default API version path (`/api/v1` or `/api/v2`) |
+| `chroma_server_cors_allow_origins` | `List[str]` | `[]` | CORS allowed origins (e.g., `["http://localhost:8000"]`) |
+| `chroma_http_keepalive_secs` | `float` | `40.0` | HTTP keepalive timeout in seconds |
+| `chroma_http_max_connections` | `int` | `None` | Maximum number of HTTP connections |
+| `chroma_http_max_keepalive_connections` | `int` | `None` | Maximum number of keepalive connections |
+
+### Server Mode Settings
+
+For embedded or server deployments:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `is_persistent` | `bool` | `False` | Enable persistent storage |
+| `persist_directory` | `str` | `"./chroma"` | Directory for persistent data |
+| `chroma_memory_limit_bytes` | `int` | `0` | Memory limit in bytes (0 = unlimited) |
+| `chroma_segment_cache_policy` | `str` | `None` | Cache policy for segments. Only `"LRU"` is supported |
+| `allow_reset` | `bool` | `False` | Allow database reset operations (enable only in development) |
+
+### Authentication Settings
+
+#### Client Authentication
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_client_auth_provider` | `str` | `None` | Client auth provider implementation |
+| `chroma_client_auth_credentials` | `str` | `None` | Credentials for client authentication |
+| `chroma_auth_token_transport_header` | `str` | `None` | Header name for auth token (default: `"Authorization"`) |
+
+#### Server Authentication
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_server_authn_provider` | `str` | `None` | Server authentication provider |
+| `chroma_server_authn_credentials` | `str` | `None` | Authentication credentials (mutually exclusive with `credentials_file`) |
+| `chroma_server_authn_credentials_file` | `str` | `None` | Path to credentials file |
+| `chroma_server_authz_provider` | `str` | `None` | Server authorization provider |
+| `chroma_server_authz_config` | `str` | `None` | Authorization config (mutually exclusive with `config_file`) |
+| `chroma_server_authz_config_file` | `str` | `None` | Path to authorization config file |
+| `chroma_overwrite_singleton_tenant_database_access_from_auth` | `bool` | `False` | Override tenant/database access from auth provider |
+
+### Telemetry Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `anonymized_telemetry` | `bool` | `True` | Send anonymous usage telemetry |
+| `chroma_product_telemetry_impl` | `str` | `"chromadb.telemetry.product.posthog.Posthog"` | Product telemetry implementation |
+| `chroma_otel_collection_endpoint` | `str` | `""` | OpenTelemetry collection endpoint |
+| `chroma_otel_service_name` | `str` | `"chromadb"` | Service name for OpenTelemetry |
+| `chroma_otel_collection_headers` | `Dict[str, str]` | `{}` | Headers for OpenTelemetry collector |
+| `chroma_otel_granularity` | `str` | `None` | Tracing granularity: `"none"`, `"operation"`, `"operation_and_segment"`, `"all"` |
+
+See [Observability](/operations/observability) for more details.
+
+### Migration Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `migrations` | `Literal["none", "validate", "apply"]` | `"apply"` | Migration mode: `none` (skip), `validate` (check only), `apply` (auto-apply) |
+| `migrations_hash_algorithm` | `Literal["md5", "sha256"]` | `"md5"` | Hash algorithm for migration verification (set once, cannot change) |
+
+See [Migrations](/operations/migrations) for more details.
+
+### Distributed Chroma Settings
+
+For distributed/production deployments:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_coordinator_host` | `str` | `"localhost"` | Coordinator service hostname |
+| `chroma_server_grpc_port` | `int` | `None` | gRPC port for system database |
+| `chroma_sysdb_impl` | `str` | `"chromadb.db.impl.sqlite.SqliteDB"` | System database implementation |
+| `chroma_producer_impl` | `str` | `"chromadb.db.impl.sqlite.SqliteDB"` | Producer implementation |
+| `chroma_consumer_impl` | `str` | `"chromadb.db.impl.sqlite.SqliteDB"` | Consumer implementation |
+| `chroma_segment_manager_impl` | `str` | `"chromadb.segment.impl.manager.local.LocalSegmentManager"` | Segment manager implementation |
+| `chroma_segment_directory_impl` | `str` | `"chromadb.segment.impl.distributed.segment_directory.RendezvousHashSegmentDirectory"` | Segment directory implementation |
+| `chroma_segment_directory_routing_mode` | `RoutingMode` | `RoutingMode.ID` | Routing mode: `node` or `id` |
+| `chroma_memberlist_provider_impl` | `str` | `"chromadb.segment.impl.distributed.segment_directory.CustomResourceMemberlistProvider"` | Memberlist provider for distributed routing |
+| `chroma_executor_impl` | `str` | `"chromadb.execution.executor.local.LocalExecutor"` | Query executor implementation |
+| `chroma_query_replication_factor` | `int` | `2` | Replication factor for queries |
+| `chroma_logservice_host` | `str` | `"localhost"` | Log service hostname |
+| `chroma_logservice_port` | `int` | `50052` | Log service port |
+| `worker_memberlist_name` | `str` | `"query-service-memberlist"` | Name of worker memberlist |
+
+### Rate Limiting & Quotas
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_quota_provider_impl` | `str` | `None` | Quota provider implementation |
+| `chroma_quota_enforcer_impl` | `str` | `"chromadb.quota.simple_quota_enforcer.SimpleQuotaEnforcer"` | Quota enforcer implementation |
+| `chroma_rate_limiting_provider_impl` | `str` | `None` | Rate limiting provider implementation |
+| `chroma_rate_limit_enforcer_impl` | `str` | `"chromadb.rate_limit.simple_rate_limit.SimpleRateLimitEnforcer"` | Rate limit enforcer implementation |
+| `chroma_async_rate_limit_enforcer_impl` | `str` | `"chromadb.rate_limit.simple_rate_limit.SimpleAsyncRateLimitEnforcer"` | Async rate limit enforcer |
+
+### gRPC Timeouts
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_logservice_request_timeout_seconds` | `int` | `3` | Log service request timeout |
+| `chroma_sysdb_request_timeout_seconds` | `int` | `3` | System database request timeout |
+| `chroma_query_request_timeout_seconds` | `int` | `60` | Query request timeout |
+
+## Example Configurations
+
+### Development Setup (In-Memory)
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_api_impl="chromadb.api.rust.RustBindingsAPI",
+    is_persistent=False,
+    allow_reset=True,
+    anonymized_telemetry=False
+))
+```
+
+### Local Persistent Storage
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_api_impl="chromadb.api.rust.RustBindingsAPI",
+    is_persistent=True,
+    persist_directory="./my_chroma_data",
+    allow_reset=False
+))
+```
+
+### Remote Server Connection
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.HttpClient(
+    host="chroma.example.com",
+    port=8000,
+    ssl=True,
+    headers={"Authorization": "Bearer YOUR_TOKEN"}
+)
+```
+
+### Production Server with Authentication
+
+```bash
+# .env file
+CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.token.TokenAuthenticationServerProvider
+CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=/path/to/credentials.json
+CHROMA_SERVER_AUTHZ_PROVIDER=chromadb.auth.simple.SimpleAuthorizationProvider
+CHROMA_SERVER_AUTHZ_CONFIG_FILE=/path/to/authz_config.yaml
+IS_PERSISTENT=True
+PERSIST_DIRECTORY=/var/lib/chroma
+ALLOW_RESET=False
+CHROMA_SERVER_NOFILE=65536
+```
+
+## YAML Configuration
+
+While Chroma primarily uses environment variables, you can also use YAML for complex configurations:
+
+```yaml
+# config.yaml
+chroma_api_impl: chromadb.api.rust.RustBindingsAPI
+is_persistent: true
+persist_directory: ./chroma_data
+allow_reset: false
+
+# Server settings
+chroma_server_host: localhost
+chroma_server_http_port: 8000
+chroma_server_ssl_enabled: false
+
+# Memory and caching
+chroma_memory_limit_bytes: 1073741824  # 1GB
+chroma_segment_cache_policy: LRU
+
+# OpenTelemetry
+chroma_otel_collection_endpoint: http://otel-collector:4317
+chroma_otel_service_name: chroma-production
+chroma_otel_granularity: operation
+
+# Migrations
+migrations: apply
+migrations_hash_algorithm: sha256
+```
+
+Load the configuration:
+
+```python
+import yaml
+from chromadb.config import Settings
+import chromadb
+
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
+
+client = chromadb.Client(Settings(**config))
+```
+
+## Validation and Errors
+
+### Required Settings
+
+Some settings are required depending on your deployment mode. Use the `require()` method to validate:
+
+```python
+from chromadb.config import Settings
+
+settings = Settings()
+# Raises ValueError if not set
+persist_dir = settings.require("persist_directory")
+```
+
+### Legacy Configuration Error
+
+Chroma will raise an error if you try to use deprecated configuration values:
+
+```python
+# This will raise an error:
+settings = Settings(chroma_db_impl="duckdb+parquet")
+# Error: "You are using a deprecated configuration of Chroma..."
+```
+
+See the [Migration Guide](/operations/migrations) for upgrading from legacy configurations.
+
+## Environment-Specific Configuration
+
+Manage different configurations per environment:
+
+```bash
+# .env.development
+ALLOW_RESET=True
+ANONYMIZED_TELEMETRY=False
+CHROMA_OTEL_GRANULARITY=all
+
+# .env.production
+ALLOW_RESET=False
+ANONYMIZED_TELEMETRY=True
+CHROMA_OTEL_GRANULARITY=operation
+CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.token.TokenAuthenticationServerProvider
+```
+
+Load based on environment:
+
+```python
+import os
+from dotenv import load_dotenv
+from chromadb.config import Settings
+import chromadb
+
+env = os.getenv("ENV", "development")
+load_dotenv(f".env.{env}")
+
+client = chromadb.Client(Settings())
+```
+
+## Best Practices
+
+1. **Never commit secrets** - Use environment variables or secret management systems for credentials
+2. **Disable reset in production** - Set `allow_reset=False` to prevent accidental data loss
+3. **Enable SSL for remote connections** - Always use `chroma_server_ssl_enabled=True` in production
+4. **Monitor memory usage** - Set `chroma_memory_limit_bytes` based on your system capacity
+5. **Choose appropriate telemetry granularity** - Use `"operation"` for production, `"all"` only for debugging
+6. **Use persistent storage** - Set `is_persistent=True` for any non-ephemeral use cases
+7. **Configure file descriptors** - Increase `chroma_server_nofile` for high-concurrency deployments
+
+## Next Steps
+
+- Learn about [Observability](/operations/observability) configuration
+- Understand [Performance Tuning](/operations/performance)
+- Set up [Schema Migrations](/operations/migrations)

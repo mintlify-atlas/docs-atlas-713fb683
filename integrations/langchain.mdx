@@ -1,0 +1,148 @@
+---
+title: LangChain integration
+description: Use Chroma as a vector store with LangChain for building LLM applications
+---
+
+Chroma integrates seamlessly with [LangChain](https://langchain.com), providing a powerful vector store for building LLM applications with retrieval-augmented generation (RAG).
+
+## Installation
+
+<CodeGroup>
+```bash Python
+pip install chromadb langchain langchain-chroma
+```
+
+```bash JavaScript
+npm install chromadb langchain
+```
+</CodeGroup>
+
+## Python integration
+
+### Basic usage
+
+```python
+from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import CharacterTextSplitter
+
+# Load and split documents
+text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+documents = text_splitter.create_documents(["Your text here"])
+
+# Create Chroma vector store
+vectorstore = Chroma.from_documents(
+    documents=documents,
+    embedding=OpenAIEmbeddings(),
+    collection_name="langchain_store",
+    persist_directory="./chroma_langchain_db"
+)
+
+# Query the vector store
+results = vectorstore.similarity_search("your query", k=3)
+```
+
+### Using with a retriever
+
+```python
+from langchain.chains import RetrievalQA
+from langchain_openai import OpenAI
+
+# Create a retriever from the vector store
+retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+
+# Create a QA chain
+qa_chain = RetrievalQA.from_chain_type(
+    llm=OpenAI(),
+    chain_type="stuff",
+    retriever=retriever
+)
+
+# Ask questions
+response = qa_chain.invoke("What is this document about?")
+```
+
+### Advanced retrieval
+
+```python
+# Maximum Marginal Relevance (MMR) search
+results = vectorstore.max_marginal_relevance_search(
+    "query text",
+    k=5,
+    fetch_k=20,
+    lambda_mult=0.5
+)
+
+# Search with metadata filtering
+results = vectorstore.similarity_search(
+    "query text",
+    filter={"source": "documentation"},
+    k=3
+)
+```
+
+## JavaScript integration
+
+```javascript
+import { Chroma } from "@langchain/community/vectorstores/chroma";
+import { OpenAIEmbeddings } from "@langchain/openai";
+
+// Create vector store
+const vectorStore = await Chroma.fromTexts(
+  ["Text 1", "Text 2", "Text 3"],
+  [{ source: "doc1" }, { source: "doc2" }, { source: "doc3" }],
+  new OpenAIEmbeddings(),
+  {
+    collectionName: "langchain_collection",
+    url: "http://localhost:8000",
+  }
+);
+
+// Query
+const results = await vectorStore.similaritySearch("query text", 3);
+```
+
+## Configuration options
+
+<ParamField path="collection_name" type="string">
+  Name of the Chroma collection
+</ParamField>
+
+<ParamField path="persist_directory" type="string">
+  Directory for persistent storage (Python only)
+</ParamField>
+
+<ParamField path="client_settings" type="Settings">
+  Chroma client settings for remote connections
+</ParamField>
+
+<ParamField path="embedding_function" type="EmbeddingFunction">
+  Custom embedding function
+</ParamField>
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Document Q&A" icon="comments-question">
+    Build question-answering systems over your documents
+  </Card>
+  <Card title="Semantic search" icon="magnifying-glass">
+    Implement semantic search with LangChain retrievers
+  </Card>
+  <Card title="RAG pipelines" icon="diagram-project">
+    Create retrieval-augmented generation workflows
+  </Card>
+  <Card title="Chat with data" icon="messages">
+    Build conversational AI that references your data
+  </Card>
+</CardGroup>
+
+## Resources
+
+- [LangChain Chroma Documentation](https://python.langchain.com/docs/integrations/vectorstores/chroma)
+- [LangChain Blog: Chroma Integration](https://blog.langchain.dev/langchain-chroma/)
+- [Example: RAG with Chroma and LangChain](https://github.com/langchain-ai/langchain/tree/master/templates/rag-chroma)
+
+<Note>
+The LangChain integration supports both persistent and in-memory Chroma instances.
+</Note>

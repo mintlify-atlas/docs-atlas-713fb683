@@ -1,0 +1,432 @@
+---
+title: Collection
+description: JavaScript Collection API reference for managing and querying embeddings
+---
+
+## Collection
+
+The Collection class represents a collection of embeddings in Chroma. It provides methods for adding, querying, updating, and deleting embeddings.
+
+### Properties
+
+<ParamField path="name" type="string">
+  The name of the collection
+</ParamField>
+
+<ParamField path="id" type="string">
+  The unique identifier of the collection
+</ParamField>
+
+<ParamField path="metadata" type="CollectionMetadata | undefined">
+  Optional metadata associated with the collection
+</ParamField>
+
+<ParamField path="embeddingFunction" type="IEmbeddingFunction">
+  The embedding function used by this collection
+</ParamField>
+
+<ParamField path="configuration" type="CollectionConfiguration | undefined">
+  The collection's configuration
+</ParamField>
+
+## Methods
+
+### add
+
+Add items to the collection.
+
+```typescript
+await collection.add(params: AddRecordsParams): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="AddRecordsParams" required>
+  <Expandable title="AddRecordsParams properties">
+    <ParamField path="ids" type="ID | IDs" required>
+      IDs of the items to add. Can be a single string or an array of strings
+    </ParamField>
+    
+    <ParamField path="embeddings" type="Embedding | Embeddings" optional>
+      Optional embeddings of the items to add. Required if documents are not provided
+    </ParamField>
+    
+    <ParamField path="metadatas" type="Metadata | Metadatas" optional>
+      Optional metadata of the items to add
+    </ParamField>
+    
+    <ParamField path="documents" type="Document | Documents" optional>
+      Optional documents of the items to add. Required if embeddings are not provided
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves when items are added
+
+<Note>
+You must provide either `embeddings` or `documents` (which will be embedded automatically using the collection's embedding function).
+</Note>
+
+**Example:**
+
+```typescript
+await collection.add({
+  ids: ["id1", "id2"],
+  embeddings: [[1, 2, 3], [4, 5, 6]],
+  metadatas: [{ "key": "value" }, { "key": "value" }],
+  documents: ["document1", "document2"]
+});
+```
+
+### query
+
+Performs a query on the collection using the specified parameters.
+
+```typescript
+await collection.query(params: QueryRecordsParams): Promise<MultiQueryResponse>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="QueryRecordsParams" required>
+  <Expandable title="QueryRecordsParams properties">
+    <ParamField path="queryEmbeddings" type="Embedding | Embeddings" optional>
+      Optional query embeddings to use for the search
+    </ParamField>
+    
+    <ParamField path="queryTexts" type="string | string[]" optional>
+      Optional query text(s) to search for in the collection
+    </ParamField>
+    
+    <ParamField path="nResults" type="number" default={10}>
+      Number of results to return
+    </ParamField>
+    
+    <ParamField path="where" type="Where" optional>
+      Optional query condition to filter results based on metadata values
+    </ParamField>
+    
+    <ParamField path="whereDocument" type="WhereDocument" optional>
+      Optional query condition to filter results based on document content
+    </ParamField>
+    
+    <ParamField path="include" type="IncludeEnum[]" optional>
+      Optional array of fields to include in the result (e.g., ["embeddings", "metadatas", "documents", "distances"])
+    </ParamField>
+    
+    <ParamField path="ids" type="IDs" optional>
+      Optional IDs to filter on before querying
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to MultiQueryResponse
+
+**Throws:** `Error` if neither queryEmbeddings nor queryTexts are provided
+
+<Note>
+You must provide either `queryEmbeddings` or `queryTexts`.
+</Note>
+
+**Example with query text:**
+
+```typescript
+const results = await collection.query({
+  queryTexts: "some text",
+  nResults: 10,
+  where: {"name": {"$eq": "John Doe"}},
+  include: ["metadatas", "documents"]
+});
+```
+
+**Example with query embeddings:**
+
+```typescript
+const results = await collection.query({
+  queryEmbeddings: [[0.1, 0.2, 0.3]],
+  nResults: 10,
+  where: {"name": {"$eq": "John Doe"}},
+  include: ["metadatas", "documents"]
+});
+```
+
+### get
+
+Get items from the collection.
+
+```typescript
+await collection.get(params?: BaseGetParams): Promise<GetResponse>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="BaseGetParams" optional>
+  <Expandable title="BaseGetParams properties">
+    <ParamField path="ids" type="ID | IDs" optional>
+      Optional IDs of the items to get
+    </ParamField>
+    
+    <ParamField path="where" type="Where" optional>
+      Optional where clause to filter items by
+    </ParamField>
+    
+    <ParamField path="limit" type="number" optional>
+      Optional limit on the number of items to get
+    </ParamField>
+    
+    <ParamField path="offset" type="number" optional>
+      Optional offset on the items to get
+    </ParamField>
+    
+    <ParamField path="include" type="IncludeEnum[]" optional>
+      Optional list of items to include in the response
+    </ParamField>
+    
+    <ParamField path="whereDocument" type="WhereDocument" optional>
+      Optional where clause to filter items by document content
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to GetResponse
+
+**Example:**
+
+```typescript
+const response = await collection.get({
+  ids: ["id1", "id2"],
+  where: { "key": "value" },
+  limit: 10,
+  offset: 0,
+  include: ["embeddings", "metadatas", "documents"],
+  whereDocument: { "$contains": "value" }
+});
+```
+
+### update
+
+Update items in the collection.
+
+```typescript
+await collection.update(params: UpdateRecordsParams): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="UpdateRecordsParams" required>
+  <Expandable title="UpdateRecordsParams properties">
+    <ParamField path="ids" type="ID | IDs" required>
+      IDs of the items to update
+    </ParamField>
+    
+    <ParamField path="embeddings" type="Embedding | Embeddings" optional>
+      Optional embeddings of the items to update
+    </ParamField>
+    
+    <ParamField path="metadatas" type="Metadata | Metadatas" optional>
+      Optional metadata of the items to update
+    </ParamField>
+    
+    <ParamField path="documents" type="Document | Documents" optional>
+      Optional documents of the items to update
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves when items are updated
+
+**Example:**
+
+```typescript
+await collection.update({
+  ids: ["id1", "id2"],
+  embeddings: [[1, 2, 3], [4, 5, 6]],
+  metadatas: [{ "key": "value" }, { "key": "value" }],
+  documents: ["document1", "document2"]
+});
+```
+
+### upsert
+
+Upsert (insert or update) items to the collection.
+
+```typescript
+await collection.upsert(params: UpsertRecordsParams): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="UpsertRecordsParams" required>
+  Same as AddRecordsParams
+</ParamField>
+
+**Returns:** Promise that resolves when items are upserted
+
+**Example:**
+
+```typescript
+await collection.upsert({
+  ids: ["id1", "id2"],
+  embeddings: [[1, 2, 3], [4, 5, 6]],
+  metadatas: [{ "key": "value" }, { "key": "value" }],
+  documents: ["document1", "document2"]
+});
+```
+
+### delete
+
+Deletes items from the collection.
+
+```typescript
+await collection.delete(params?: DeleteParams): Promise<void>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="DeleteParams" optional>
+  <Expandable title="DeleteParams properties">
+    <ParamField path="ids" type="ID | IDs" optional>
+      Optional ID or array of IDs of items to delete
+    </ParamField>
+    
+    <ParamField path="where" type="Where" optional>
+      Optional query condition to filter items to delete based on metadata values
+    </ParamField>
+    
+    <ParamField path="whereDocument" type="WhereDocument" optional>
+      Optional query condition to filter items to delete based on document content
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise that resolves when items are deleted
+
+**Throws:** `Error` if there is an issue deleting items
+
+**Example:**
+
+```typescript
+await collection.delete({
+  ids: "some_id",
+  where: {"name": {"$eq": "John Doe"}},
+  whereDocument: {"$contains": "search_string"}
+});
+```
+
+### count
+
+Count the number of items in the collection.
+
+```typescript
+await collection.count(): Promise<number>
+```
+
+**Returns:** Promise resolving to the number of items in the collection
+
+**Example:**
+
+```typescript
+const count = await collection.count();
+console.log(`Collection has ${count} items`);
+```
+
+### peek
+
+Peek inside the collection to get a sample of items.
+
+```typescript
+await collection.peek(params?: PeekParams): Promise<MultiGetResponse>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="PeekParams" optional>
+  <Expandable title="PeekParams properties">
+    <ParamField path="limit" type="number" default={10}>
+      Number of results to return
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the query results
+
+**Throws:** `Error` if there is an issue executing the query
+
+**Example:**
+
+```typescript
+const results = await collection.peek({
+  limit: 10
+});
+```
+
+### modify
+
+Modify the collection name or metadata.
+
+```typescript
+await collection.modify(params: {
+  name?: string;
+  metadata?: CollectionMetadata;
+  configuration?: UpdateCollectionConfiguration;
+}): Promise<CollectionParams>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="name" type="string" optional>
+      Optional new name for the collection
+    </ParamField>
+    
+    <ParamField path="metadata" type="CollectionMetadata" optional>
+      Optional new metadata for the collection
+    </ParamField>
+    
+    <ParamField path="configuration" type="UpdateCollectionConfiguration" optional>
+      Optional new configuration for the collection
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the updated collection parameters
+
+**Example:**
+
+```typescript
+await collection.modify({
+  name: "new_collection_name",
+  metadata: { "description": "Updated description" }
+});
+```
+
+### fork
+
+Forks the collection into a new collection with a new name.
+
+```typescript
+await collection.fork(params: ForkCollectionParams): Promise<Collection>
+```
+
+**Parameters:**
+
+<ParamField path="params" type="ForkCollectionParams" required>
+  <Expandable title="ForkCollectionParams properties">
+    <ParamField path="newName" type="string" required>
+      The name for the new forked collection
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** Promise resolving to the new forked Collection object
+
+**Throws:** `Error` if there is an issue forking the collection
+
+**Example:**
+
+```typescript
+const newCollection = await collection.fork({
+  newName: "my_forked_collection"
+});
+```

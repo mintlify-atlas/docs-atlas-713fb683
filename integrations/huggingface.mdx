@@ -1,0 +1,291 @@
+---
+title: Hugging Face embeddings
+description: Use Hugging Face models with Chroma for flexible, open-source embeddings
+---
+
+Chroma supports Hugging Face's vast ecosystem of embedding models, giving you access to thousands of open-source models for your specific use case.
+
+## Installation
+
+```bash Python
+pip install chromadb sentence-transformers
+```
+
+<Note>
+The `sentence-transformers` library is required for using Hugging Face models with Chroma.
+</Note>
+
+## Using Sentence Transformers
+
+### Basic usage
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+# Create embedding function with a specific model
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2"
+)
+
+# Create collection
+client = chromadb.Client()
+collection = client.create_collection(
+    name="huggingface_embeddings",
+    embedding_function=embedding_function
+)
+
+# Add documents
+collection.add(
+    documents=["This is a document", "This is another document"],
+    ids=["doc1", "doc2"]
+)
+
+# Query
+results = collection.query(
+    query_texts=["document query"],
+    n_results=2
+)
+```
+
+## Popular models
+
+<Tabs>
+  <Tab title="General purpose">
+    ```python
+    # all-MiniLM-L6-v2 (default in Chroma)
+    # Dimensions: 384
+    # Fast and efficient for most use cases
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="all-MiniLM-L6-v2"
+    )
+
+    # all-mpnet-base-v2
+    # Dimensions: 768
+    # Better quality, slower
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="all-mpnet-base-v2"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Multilingual">
+    ```python
+    # paraphrase-multilingual-MiniLM-L12-v2
+    # Dimensions: 384
+    # Supports 50+ languages
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="paraphrase-multilingual-MiniLM-L12-v2"
+    )
+
+    # distiluse-base-multilingual-cased-v2
+    # Dimensions: 512
+    # Good multilingual performance
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="distiluse-base-multilingual-cased-v2"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Specialized">
+    ```python
+    # msmarco-MiniLM-L-6-v3
+    # Dimensions: 384
+    # Optimized for passage retrieval
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="msmarco-MiniLM-L-6-v3"
+    )
+
+    # multi-qa-MiniLM-L6-cos-v1
+    # Dimensions: 384
+    # Optimized for question-answering
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="multi-qa-MiniLM-L6-cos-v1"
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Using the Hugging Face API
+
+### With HuggingFace Inference API
+
+```python
+from chromadb.utils.embedding_functions import HuggingFaceEmbeddingFunction
+
+# Use Hugging Face Inference API
+embedding_function = HuggingFaceEmbeddingFunction(
+    api_key="your-hf-api-token",
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+collection = client.create_collection(
+    name="hf_api_collection",
+    embedding_function=embedding_function
+)
+```
+
+### With a custom inference endpoint
+
+```python
+embedding_function = HuggingFaceEmbeddingFunction(
+    api_key="your-api-token",
+    model_name="your-model",
+    api_url="https://your-endpoint.aws.endpoints.huggingface.cloud"
+)
+```
+
+## Device configuration
+
+```python
+# Run on GPU if available
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2",
+    device="cuda"  # or "cpu"
+)
+
+# Use specific GPU
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2",
+    device="cuda:0"  # Use first GPU
+)
+```
+
+## Model selection guide
+
+<CardGroup cols={2}>
+  <Card title="Fast & efficient" icon="gauge-high">
+    **all-MiniLM-L6-v2** (384 dims)  
+    Best for: High-throughput applications, real-time search
+  </Card>
+  <Card title="High quality" icon="star">
+    **all-mpnet-base-v2** (768 dims)  
+    Best for: When accuracy is more important than speed
+  </Card>
+  <Card title="Multilingual" icon="globe">
+    **paraphrase-multilingual-MiniLM-L12-v2** (384 dims)  
+    Best for: Multi-language content
+  </Card>
+  <Card title="Code search" icon="code">
+    **multi-qa-mpnet-base-dot-v1** (768 dims)  
+    Best for: Question-answering systems
+  </Card>
+</CardGroup>
+
+## Configuration options
+
+<ParamField path="model_name" type="string" required>
+  Name of the Sentence Transformer model from Hugging Face
+</ParamField>
+
+<ParamField path="device" type="string" default="cpu">
+  Device to run the model on: `cpu`, `cuda`, or `cuda:N`
+</ParamField>
+
+<ParamField path="normalize_embeddings" type="bool" default="false">
+  Whether to normalize embeddings to unit length
+</ParamField>
+
+<ParamField path="api_key" type="string">
+  Hugging Face API token (for HuggingFaceEmbeddingFunction)
+</ParamField>
+
+## Custom models
+
+### Load a fine-tuned model
+
+```python
+# Use your own fine-tuned model from Hugging Face
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="your-username/your-model-name"
+)
+```
+
+### Load a local model
+
+```python
+# Use a locally saved model
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="/path/to/local/model"
+)
+```
+
+## Performance optimization
+
+### Batch processing
+
+```python
+# Add documents in batches for better performance
+documents = [f"Document {i}" for i in range(1000)]
+ids = [f"id{i}" for i in range(1000)]
+
+# Process in batches of 100
+batch_size = 100
+for i in range(0, len(documents), batch_size):
+    batch_docs = documents[i:i+batch_size]
+    batch_ids = ids[i:i+batch_size]
+    collection.add(
+        documents=batch_docs,
+        ids=batch_ids
+    )
+```
+
+### Model caching
+
+```python
+import os
+
+# Set cache directory for models
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/path/to/cache"
+
+# First use downloads the model to cache
+embedding_function = SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2"
+)
+```
+
+## Finding models
+
+Browse thousands of models on Hugging Face:
+
+1. Visit [Hugging Face Models](https://huggingface.co/models)
+2. Filter by:
+   - Task: "Sentence Similarity" or "Feature Extraction"
+   - Library: "sentence-transformers"
+3. Check model card for:
+   - Embedding dimensions
+   - Languages supported
+   - Performance metrics
+   - License
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Choose the right model size">
+    - Smaller models (384 dims): Faster, use less storage
+    - Larger models (768+ dims): Better quality, slower
+    - Consider your performance requirements vs. accuracy needs
+  </Accordion>
+  
+  <Accordion title="Use GPU for large datasets">
+    If you're processing thousands of documents, using a GPU can significantly speed up embedding generation.
+  </Accordion>
+  
+  <Accordion title="Cache downloaded models">
+    Models are cached after first download. Set `SENTENCE_TRANSFORMERS_HOME` to control cache location.
+  </Accordion>
+  
+  <Accordion title="Test different models">
+    Different models excel at different tasks. Test multiple models with your specific use case.
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+- [Sentence Transformers Documentation](https://www.sbert.net/)
+- [Hugging Face Models](https://huggingface.co/models?library=sentence-transformers)
+- [Model Performance Comparison](https://www.sbert.net/docs/pretrained_models.html)
+
+<Tip>
+**Free and open-source**: All Sentence Transformer models can be run locally without API costs, making them perfect for production deployments.
+</Tip>

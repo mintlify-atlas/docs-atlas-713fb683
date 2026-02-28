@@ -1,0 +1,496 @@
+---
+title: 'Multimodal Data'
+description: 'Work with images, text, and other data types in Chroma'
+---
+
+Chroma supports multimodal collections that can contain and be queried by multiple data types including text, images, and other modalities.
+
+## Overview
+
+Multimodal collections in Chroma use:
+
+1. **URIs** - Reference external data (images, audio, video)
+2. **Data Loaders** - Load data from URIs
+3. **Multimodal Embedding Functions** - Embed different data types into the same vector space
+
+## Working with Images
+
+### Basic Image Collection
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
+from chromadb.utils.data_loaders import ImageLoader
+
+client = chromadb.Client()
+
+# Create embedding function and data loader
+embedding_function = OpenCLIPEmbeddingFunction()
+data_loader = ImageLoader()
+
+# Create multimodal collection
+collection = client.create_collection(
+    name='multimodal_collection',
+    embedding_function=embedding_function,
+    data_loader=data_loader
+)
+```
+
+### Adding Images
+
+Add images using file URIs:
+
+```python
+# Add images from local files
+collection.add(
+    ids=["img1", "img2", "img3"],
+    uris=[
+        "./images/cat.jpg",
+        "./images/dog.jpg",
+        "./images/bird.jpg"
+    ]
+)
+```
+
+### Querying with Text
+
+Search images using text descriptions:
+
+```python
+# Find images similar to text query
+results = collection.query(
+    query_texts=["a photo of a cat"],
+    n_results=5
+)
+
+# Results include image data
+for img in results['data'][0]:
+    plt.imshow(img)
+    plt.axis("off")
+    plt.show()
+```
+
+### Querying with Images
+
+Search using an image:
+
+```python
+# Find similar images
+results = collection.query(
+    query_uris=["./query_image.jpg"],
+    n_results=5,
+    include=['data', 'distances']
+)
+```
+
+## Complete Multimodal Example
+
+### Setup
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
+from chromadb.utils.data_loaders import ImageLoader
+import os
+from matplotlib import pyplot as plt
+
+# Initialize
+client = chromadb.Client()
+embedding_function = OpenCLIPEmbeddingFunction()
+image_loader = ImageLoader()
+
+# Create collection
+collection = client.create_collection(
+    name='image_collection',
+    embedding_function=embedding_function,
+    data_loader=image_loader
+)
+```
+
+### Indexing Images
+
+```python
+# Get image paths
+image_folder = "./images"
+image_uris = [
+    os.path.join(image_folder, img) 
+    for img in os.listdir(image_folder)
+    if img.endswith(('.jpg', '.png'))
+]
+
+# Create IDs
+ids = [f"img_{i}" for i in range(len(image_uris))]
+
+# Add images to collection
+for id, uri in zip(ids, image_uris):
+    collection.add(
+        ids=[id],
+        uris=[uri]
+    )
+
+print(f"Indexed {len(image_uris)} images")
+```
+
+### Searching
+
+```python
+# Text-to-image search
+results = collection.query(
+    query_texts=["sunset over mountains"],
+    n_results=3,
+    include=['data', 'distances', 'metadatas']
+)
+
+# Display results
+for i, img in enumerate(results['data'][0]):
+    distance = results['distances'][0][i]
+    print(f"Result {i+1} (distance: {distance:.4f})")
+    plt.imshow(img)
+    plt.axis("off")
+    plt.show()
+```
+
+## Adding Metadata to Images
+
+```python
+collection.add(
+    ids=["img1", "img2"],
+    uris=["./cat.jpg", "./dog.jpg"],
+    metadatas=[
+        {"animal": "cat", "breed": "persian", "age": 3},
+        {"animal": "dog", "breed": "labrador", "age": 5}
+    ]
+)
+
+# Query with metadata filter
+results = collection.query(
+    query_texts=["cute pet"],
+    n_results=5,
+    where={"animal": "cat"}  # Only return cats
+)
+```
+
+## Combining Text and Images
+
+Store both text and images in the same collection:
+
+```python
+# Add text documents
+collection.add(
+    ids=["doc1", "doc2"],
+    documents=[
+        "A comprehensive guide to cat care",
+        "Understanding dog behavior"
+    ],
+    metadatas=[
+        {"type": "text", "topic": "cats"},
+        {"type": "text", "topic": "dogs"}
+    ]
+)
+
+# Add images
+collection.add(
+    ids=["img1", "img2"],
+    uris=["./cat.jpg", "./dog.jpg"],
+    metadatas=[
+        {"type": "image", "topic": "cats"},
+        {"type": "image", "topic": "dogs"}
+    ]
+)
+
+# Query returns both text and images
+results = collection.query(
+    query_texts=["information about cats"],
+    n_results=5
+)
+
+# Filter results by type
+for id, metadata in zip(results['ids'][0], results['metadatas'][0]):
+    if metadata['type'] == 'image':
+        print(f"Image result: {id}")
+    else:
+        print(f"Text result: {id}")
+```
+
+## Advanced: Custom Data Loaders
+
+Create a custom data loader for other file types:
+
+```python
+from chromadb.api.types import DataLoader, URIs, Loadable
+import numpy as np
+from PIL import Image
+from typing import List
+
+class CustomImageLoader(DataLoader):
+    def __call__(self, uris: URIs) -> List[np.ndarray]:
+        images = []
+        for uri in uris:
+            # Custom loading logic
+            img = Image.open(uri)
+            # Preprocess image
+            img = img.resize((224, 224))
+            img_array = np.array(img)
+            images.append(img_array)
+        return images
+
+# Use custom loader
+custom_loader = CustomImageLoader()
+collection = client.create_collection(
+    name='custom_image_collection',
+    embedding_function=embedding_function,
+    data_loader=custom_loader
+)
+```
+
+## OpenCLIP Embedding Function
+
+The OpenCLIP embedding function supports various models:
+
+```python
+from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
+
+# Default model
+default_ef = OpenCLIPEmbeddingFunction()
+
+# Specific model
+custom_ef = OpenCLIPEmbeddingFunction(
+    model_name="ViT-B-32",
+    checkpoint="laion2b_s34b_b79k"
+)
+
+collection = client.create_collection(
+    name='my_collection',
+    embedding_function=custom_ef,
+    data_loader=ImageLoader()
+)
+```
+
+Available CLIP models:
+- `ViT-B-32` - Fast, good quality
+- `ViT-B-16` - Better quality, slower
+- `ViT-L-14` - Best quality, slowest
+
+## URI Formats
+
+Chroma supports various URI formats:
+
+```python
+# Local files
+collection.add(uris=["./image.jpg"])
+collection.add(uris=["/absolute/path/to/image.jpg"])
+
+# Remote URLs (if data loader supports it)
+collection.add(uris=["https://example.com/image.jpg"])
+
+# Relative paths
+collection.add(uris=["../images/photo.png"])
+```
+
+## Retrieving Image Data
+
+```python
+# Include image data in query results
+results = collection.query(
+    query_texts=["query"],
+    n_results=5,
+    include=['data']  # Include loaded image data
+)
+
+# Access images
+for img_data in results['data'][0]:
+    # img_data is a numpy array
+    plt.imshow(img_data)
+    plt.show()
+
+# Or get by ID
+results = collection.get(
+    ids=["img1", "img2"],
+    include=['data']
+)
+```
+
+## Performance Considerations
+
+### Batch Processing
+
+```python
+# Efficient: batch add
+image_uris = [f"./images/img_{i}.jpg" for i in range(100)]
+ids = [f"img_{i}" for i in range(100)]
+
+collection.add(ids=ids, uris=image_uris)
+
+# Inefficient: one at a time
+for id, uri in zip(ids, image_uris):
+    collection.add(ids=[id], uris=[uri])  # Slower
+```
+
+### Image Preprocessing
+
+Preprocess images before indexing:
+
+```python
+from PIL import Image
+import os
+
+def preprocess_images(input_dir, output_dir, size=(224, 224)):
+    """Resize and optimize images"""
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for filename in os.listdir(input_dir):
+        if filename.endswith(('.jpg', '.png')):
+            img = Image.open(os.path.join(input_dir, filename))
+            img = img.resize(size, Image.Resampling.LANCZOS)
+            img.save(
+                os.path.join(output_dir, filename),
+                quality=85,
+                optimize=True
+            )
+
+# Preprocess before indexing
+preprocess_images("./raw_images", "./processed_images")
+
+# Index preprocessed images
+image_uris = [f"./processed_images/{img}" for img in os.listdir("./processed_images")]
+collection.add(ids=[...], uris=image_uris)
+```
+
+## Use Cases
+
+### Image Search Application
+
+```python
+def image_search_app(query_text: str, max_results: int = 10):
+    """Simple image search application"""
+    results = collection.query(
+        query_texts=[query_text],
+        n_results=max_results,
+        include=['data', 'metadatas', 'distances']
+    )
+    
+    # Display results
+    fig, axes = plt.subplots(2, 5, figsize=(15, 6))
+    axes = axes.flatten()
+    
+    for i, (img, metadata, distance) in enumerate(zip(
+        results['data'][0],
+        results['metadatas'][0],
+        results['distances'][0]
+    )):
+        axes[i].imshow(img)
+        axes[i].set_title(f"Score: {1-distance:.3f}")
+        axes[i].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+# Use the app
+image_search_app("beautiful sunset", max_results=10)
+```
+
+### Product Catalog
+
+```python
+# Add product images with metadata
+for product in products:
+    collection.add(
+        ids=[product['id']],
+        uris=[product['image_path']],
+        metadatas=[
+            {
+                "name": product['name'],
+                "category": product['category'],
+                "price": product['price'],
+                "in_stock": product['in_stock']
+            }
+        ]
+    )
+
+# Search products
+results = collection.query(
+    query_texts=["red shoes"],
+    n_results=20,
+    where={
+        "$and": [
+            {"category": "footwear"},
+            {"in_stock": True},
+            {"price": {"$lt": 100}}
+        ]
+    }
+)
+```
+
+### Duplicate Detection
+
+```python
+def find_duplicates(threshold=0.95):
+    """Find similar/duplicate images"""
+    all_ids = collection.get()['ids']
+    duplicates = []
+    
+    for id in all_ids:
+        # Query with the image itself
+        results = collection.query(
+            query_uris=[collection.get(ids=[id])['uris'][0]],
+            n_results=5
+        )
+        
+        # Check for high similarity (excluding self)
+        for result_id, distance in zip(
+            results['ids'][0][1:],  # Skip first (self)
+            results['distances'][0][1:]
+        ):
+            if distance < (1 - threshold):
+                duplicates.append((id, result_id, distance))
+    
+    return duplicates
+
+duplicates = find_duplicates(threshold=0.98)
+print(f"Found {len(duplicates)} potential duplicates")
+```
+
+## Troubleshooting
+
+### Image Loading Errors
+
+```python
+# Check file exists
+import os
+if not os.path.exists(image_path):
+    print(f"Image not found: {image_path}")
+
+# Check file format
+from PIL import Image
+try:
+    img = Image.open(image_path)
+    print(f"Format: {img.format}, Size: {img.size}")
+except Exception as e:
+    print(f"Error loading image: {e}")
+```
+
+### Memory Issues
+
+```python
+# Process large collections in batches
+batch_size = 100
+for i in range(0, len(image_uris), batch_size):
+    batch_uris = image_uris[i:i+batch_size]
+    batch_ids = ids[i:i+batch_size]
+    collection.add(ids=batch_ids, uris=batch_uris)
+    print(f"Processed {i+len(batch_uris)}/{len(image_uris)} images")
+```
+
+### Data Loader Not Found
+
+```python
+# Ensure data loader is specified
+try:
+    collection = client.create_collection(
+        name='test',
+        embedding_function=OpenCLIPEmbeddingFunction(),
+        data_loader=ImageLoader()  # Don't forget this!
+    )
+except Exception as e:
+    print(f"Error: {e}")
+```

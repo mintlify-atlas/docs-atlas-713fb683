@@ -1,0 +1,249 @@
+---
+title: Collections
+description: Understanding Chroma collections - the containers for your embeddings
+---
+
+Collections are the fundamental organizational unit in Chroma. They are named groups of embeddings, documents, and metadata that you can query.
+
+## What is a Collection?
+
+A collection is a container that holds:
+- **Embeddings**: Vector representations of your data
+- **Documents**: The original text or data
+- **Metadata**: Additional information about each record
+- **IDs**: Unique identifiers for each record
+
+Think of a collection like a table in a traditional database, but optimized for vector similarity search.
+
+## Creating Collections
+
+Create a new collection using `create_collection()`:
+
+```python
+import chromadb
+
+client = chromadb.Client()
+
+# Create a new collection
+collection = client.create_collection(name="my_collection")
+```
+
+### With Metadata
+
+You can attach metadata to the collection itself:
+
+```python
+collection = client.create_collection(
+    name="documents",
+    metadata={"description": "Research papers", "type": "academic"}
+)
+```
+
+### With Custom Embedding Function
+
+Specify a custom embedding function for the collection:
+
+```python
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+embedding_function = OpenAIEmbeddingFunction(api_key="your-api-key")
+
+collection = client.create_collection(
+    name="my_collection",
+    embedding_function=embedding_function
+)
+```
+
+## Getting Collections
+
+Retrieve an existing collection:
+
+```python
+# Get an existing collection
+collection = client.get_collection(name="my_collection")
+
+# Get or create (returns existing or creates new)
+collection = client.get_or_create_collection(name="my_collection")
+```
+
+## Listing Collections
+
+List all collections in the database:
+
+```python
+# List all collections
+collections = client.list_collections()
+
+for collection in collections:
+    print(collection.name)
+
+# With pagination
+collections = client.list_collections(limit=10, offset=0)
+```
+
+## Deleting Collections
+
+Delete a collection and all its data:
+
+```python
+client.delete_collection(name="my_collection")
+```
+
+<Warning>
+Deleting a collection is permanent and cannot be undone. All embeddings, documents, and metadata in the collection will be lost.
+</Warning>
+
+## Collection Operations
+
+### Count Records
+
+Get the number of records in a collection:
+
+```python
+count = collection.count()
+print(f"Collection has {count} records")
+```
+
+### Peek
+
+Quickly view the first few records:
+
+```python
+# Get first 10 records
+results = collection.peek(limit=10)
+print(results['ids'])
+print(results['documents'])
+```
+
+### Modify Collection
+
+Update collection name or metadata:
+
+```python
+# Update collection metadata
+collection.modify(metadata={"updated": "2024-01-01"})
+
+# Rename collection
+collection.modify(name="new_collection_name")
+```
+
+## Collection Configuration
+
+Collections can be configured with specific index and schema settings:
+
+```python
+from chromadb.api.collection_configuration import CreateCollectionConfiguration
+from chromadb.api.types import HnswIndexConfig
+
+configuration = CreateCollectionConfiguration(
+    hnsw_index_config=HnswIndexConfig(
+        space="cosine",  # or "l2", "ip"
+        ef_construction=200,
+        ef_search=100,
+        m=16
+    )
+)
+
+collection = client.create_collection(
+    name="my_collection",
+    configuration=configuration
+)
+```
+
+### Distance Metrics
+
+Chroma supports three distance metrics (spaces):
+
+- **`cosine`**: Cosine similarity (default for most embedding functions)
+- **`l2`**: Euclidean (L2) distance
+- **`ip`**: Inner product
+
+## Schema Configuration
+
+Define the structure of your collection data:
+
+```python
+from chromadb.api.types import Schema, StringValueType, FloatListValueType
+
+schema = Schema(
+    keys={
+        "#document": StringValueType(),
+        "#embedding": FloatListValueType(),
+        "title": StringValueType(),
+        "author": StringValueType(),
+    }
+)
+
+collection = client.create_collection(
+    name="my_collection",
+    schema=schema
+)
+```
+
+## Indexing Status
+
+Monitor the indexing progress of your collection:
+
+```python
+status = collection.get_indexing_status()
+
+print(f"Indexed operations: {status.num_indexed_ops}")
+print(f"Unindexed operations: {status.num_unindexed_ops}")
+print(f"Total operations: {status.total_ops}")
+print(f"Progress: {status.op_indexing_progress:.1%}")
+```
+
+This is useful for understanding when recent writes have been fully indexed and are available for search.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive names">
+    Choose collection names that clearly describe the data they contain:
+    ```python
+    # Good
+    collection = client.create_collection("product_descriptions")
+    
+    # Avoid
+    collection = client.create_collection("data1")
+    ```
+  </Accordion>
+
+  <Accordion title="Add metadata to collections">
+    Use collection metadata to track versioning and description:
+    ```python
+    collection = client.create_collection(
+        name="documents",
+        metadata={
+            "version": "1.0",
+            "created_at": "2024-01-01",
+            "description": "Customer support documents"
+        }
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Choose appropriate distance metrics">
+    Different embedding models work best with different distance metrics:
+    - Most OpenAI embeddings: use `cosine`
+    - Some specialized embeddings: use `l2` or `ip`
+    - Check your embedding model's documentation
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Embeddings" icon="vector-square" href="/concepts/embeddings">
+    Learn how Chroma handles vector embeddings
+  </Card>
+  <Card title="Metadata" icon="tags" href="/concepts/metadata">
+    Understand metadata and filtering
+  </Card>
+  <Card title="Querying" icon="magnifying-glass" href="/concepts/querying">
+    Query your collections with similarity search
+  </Card>
+  <Card title="Embedding Functions" icon="plus" href="/guides/embedding-functions">
+    Use embedding functions with collections
+  </Card>
+</CardGroup>

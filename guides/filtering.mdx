@@ -1,0 +1,472 @@
+---
+title: 'Filtering and Where Clauses'
+description: 'Filter query results using metadata and document content'
+---
+
+Chroma supports powerful filtering capabilities to narrow down query results based on metadata values and document content.
+
+## Where Clause Syntax
+
+The `where` parameter filters results based on metadata values.
+
+### Basic Equality
+
+```python
+import chromadb
+
+client = chromadb.Client()
+collection = client.create_collection("my_collection")
+
+# Add documents with metadata
+collection.add(
+    documents=[
+        "The cat sat on the mat",
+        "The dog played in the yard",
+        "The bird flew in the sky"
+    ],
+    metadatas=[
+        {"animal": "cat", "location": "indoor"},
+        {"animal": "dog", "location": "outdoor"},
+        {"animal": "bird", "location": "outdoor"}
+    ],
+    ids=["id1", "id2", "id3"]
+)
+
+# Filter by exact match
+results = collection.get(
+    where={"animal": "cat"}
+)
+# Returns: documents about cats
+```
+
+### Comparison Operators
+
+```python
+# Greater than
+results = collection.get(
+    where={"year": {"$gt": 2020}}
+)
+
+# Greater than or equal
+results = collection.get(
+    where={"year": {"$gte": 2020}}
+)
+
+# Less than
+results = collection.get(
+    where={"price": {"$lt": 100}}
+)
+
+# Less than or equal
+results = collection.get(
+    where={"price": {"$lte": 100}}
+)
+
+# Not equal
+results = collection.get(
+    where={"status": {"$ne": "archived"}}
+)
+
+# Equal (explicit)
+results = collection.get(
+    where={"status": {"$eq": "active"}}
+)
+```
+
+Comparison operators (`$gt`, `$gte`, `$lt`, `$lte`) only work with numeric values (int or float).
+
+### Inclusion Operators
+
+```python
+# In - matches any value in list
+results = collection.get(
+    where={"category": {"$in": ["tech", "science", "math"]}}
+)
+
+# Not in - matches values not in list
+results = collection.get(
+    where={"status": {"$nin": ["archived", "deleted"]}}
+)
+```
+
+### Array Operators
+
+Use `$contains` and `$not_contains` to filter based on array metadata:
+
+```python
+collection.add(
+    documents=["Document with tags"],
+    metadatas=[{"tags": ["python", "ai", "ml"]}],
+    ids=["id1"]
+)
+
+# Contains - checks if array contains value
+results = collection.get(
+    where={"tags": {"$contains": "python"}}
+)
+
+# Not contains - checks if array doesn't contain value
+results = collection.get(
+    where={"tags": {"$not_contains": "javascript"}}
+)
+```
+
+### Logical Operators
+
+#### AND Operator
+
+Combine multiple conditions (all must be true):
+
+```python
+results = collection.get(
+    where={
+        "$and": [
+            {"category": "tech"},
+            {"year": {"$gte": 2020}}
+        ]
+    }
+)
+```
+
+#### OR Operator
+
+Match any condition:
+
+```python
+results = collection.get(
+    where={
+        "$or": [
+            {"author": "john"},
+            {"author": "jane"}
+        ]
+    }
+)
+```
+
+#### Nested Logical Operators
+
+Combine AND and OR:
+
+```python
+results = collection.get(
+    where={
+        "$and": [
+            {"category": "tech"},
+            {
+                "$or": [
+                    {"author": "john"},
+                    {"author": "jane"}
+                ]
+            }
+        ]
+    }
+)
+```
+
+## WhereDocument Clause
+
+The `where_document` parameter filters based on document content.
+
+### Contains Operator
+
+```python
+# Find documents containing a word
+results = collection.get(
+    where_document={"$contains": "python"}
+)
+
+# Find documents not containing a word
+results = collection.get(
+    where_document={"$not_contains": "deprecated"}
+)
+```
+
+### Regex Matching
+
+```python
+# Regex pattern
+results = collection.get(
+    where_document={"$regex": r"\bpython\d+\b"}  # Matches "python3", "python2", etc.
+)
+
+# Negative regex
+results = collection.get(
+    where_document={"$not_regex": r"\btest\b"}  # Excludes documents with "test"
+)
+```
+
+### Logical Operators with Documents
+
+```python
+# AND - document must contain both terms
+results = collection.get(
+    where_document={
+        "$and": [
+            {"$contains": "python"},
+            {"$contains": "machine learning"}
+        ]
+    }
+)
+
+# OR - document contains at least one term
+results = collection.get(
+    where_document={
+        "$or": [
+            {"$contains": "python"},
+            {"$contains": "javascript"}
+        ]
+    }
+)
+```
+
+## Combining Where and WhereDocument
+
+Use both filters together:
+
+```python
+results = collection.get(
+    where={"category": "programming"},
+    where_document={"$contains": "tutorial"}
+)
+# Returns: programming documents that contain "tutorial"
+
+# With query
+results = collection.query(
+    query_texts=["How to write code"],
+    n_results=10,
+    where={"difficulty": "beginner"},
+    where_document={"$contains": "example"}
+)
+# Returns: top 10 relevant beginner documents with examples
+```
+
+## Real-World Examples
+
+### E-commerce Product Search
+
+```python
+# Find affordable electronics
+results = collection.query(
+    query_texts=["laptop"],
+    n_results=20,
+    where={
+        "$and": [
+            {"category": "electronics"},
+            {"price": {"$lt": 1000}},
+            {"in_stock": True}
+        ]
+    }
+)
+```
+
+### Content Moderation
+
+```python
+# Find recent posts that need review
+results = collection.get(
+    where={
+        "$and": [
+            {"status": "pending"},
+            {"created": {"$gte": 1704067200}}  # After Jan 1, 2024
+        ]
+    },
+    where_document={
+        "$not_regex": r".*profanity.*"  # Exclude obvious violations
+    }
+)
+```
+
+### Document Archive
+
+```python
+# Find unarchived documents by multiple authors
+results = collection.get(
+    where={
+        "$and": [
+            {"archived": False},
+            {
+                "$or": [
+                    {"author": "alice"},
+                    {"author": "bob"},
+                    {"author": "charlie"}
+                ]
+            }
+        ]
+    },
+    where_document={
+        "$and": [
+            {"$contains": "quarterly report"},
+            {"$not_contains": "draft"}
+        ]
+    }
+)
+```
+
+### Multi-tag Filtering
+
+```python
+collection.add(
+    documents=["AI article", "Web dev tutorial", "Data science guide"],
+    metadatas=[
+        {"tags": ["ai", "ml", "python"]},
+        {"tags": ["web", "javascript", "react"]},
+        {"tags": ["python", "data", "pandas"]}
+    ],
+    ids=["1", "2", "3"]
+)
+
+# Find Python-related content
+results = collection.get(
+    where={"tags": {"$contains": "python"}}
+)
+# Returns: documents 1 and 3
+
+# Find content with either tag
+results = collection.get(
+    where={
+        "$or": [
+            {"tags": {"$contains": "python"}},
+            {"tags": {"$contains": "javascript"}}
+        ]
+    }
+)
+# Returns: all three documents
+```
+
+## Performance Tips
+
+### Index Metadata Fields
+
+Chroma automatically indexes metadata fields, but keep metadata simple:
+
+```python
+# Good - simple, indexed fields
+metadata = {
+    "category": "tech",
+    "year": 2024,
+    "active": True
+}
+
+# Avoid - nested objects (not indexed)
+metadata = {
+    "details": {
+        "category": "tech",  # Not directly filterable
+        "subcategory": "ai"
+    }
+}
+```
+
+### Prefer Metadata Filters
+
+Metadata filters are faster than document filters:
+
+```python
+# Faster - filter on indexed metadata
+results = collection.get(
+    where={"status": "published"}
+)
+
+# Slower - filter on document content
+results = collection.get(
+    where_document={"$contains": "published"}
+)
+```
+
+### Limit Results
+
+Combine filters with limits:
+
+```python
+results = collection.query(
+    query_texts=["search term"],
+    n_results=10,  # Limit results
+    where={"category": "tech"}
+)
+```
+
+## Common Pitfalls
+
+### Case Sensitivity
+
+Filters are case-sensitive:
+
+```python
+# Won't match {"category": "Tech"}
+results = collection.get(where={"category": "tech"})
+
+# Solution: normalize case when adding
+metadata = {"category": value.lower()}
+```
+
+### Type Matching
+
+Ensure types match:
+
+```python
+# Won't match {"year": "2024"} (string)
+results = collection.get(where={"year": 2024})  # int
+
+# Solution: use consistent types
+metadata = {"year": int(year_str)}
+```
+
+### Empty Results
+
+```python
+# Returns empty if no matches
+results = collection.get(where={"nonexistent": "value"})
+
+# Check before processing
+if len(results["ids"]) > 0:
+    process_results(results)
+```
+
+## Advanced Filtering
+
+### Dynamic Filter Building
+
+```python
+def build_filter(categories=None, min_price=None, max_price=None):
+    conditions = []
+    
+    if categories:
+        conditions.append({"category": {"$in": categories}})
+    
+    if min_price is not None:
+        conditions.append({"price": {"$gte": min_price}})
+    
+    if max_price is not None:
+        conditions.append({"price": {"$lte": max_price}})
+    
+    if len(conditions) == 0:
+        return None
+    elif len(conditions) == 1:
+        return conditions[0]
+    else:
+        return {"$and": conditions}
+
+# Use dynamic filter
+where_clause = build_filter(
+    categories=["electronics", "computers"],
+    max_price=1000
+)
+results = collection.get(where=where_clause)
+```
+
+### Pagination with Filters
+
+```python
+# Get first page
+page1 = collection.get(
+    where={"category": "tech"},
+    limit=20,
+    offset=0
+)
+
+# Get second page
+page2 = collection.get(
+    where={"category": "tech"},
+    limit=20,
+    offset=20
+)
+```

@@ -1,0 +1,604 @@
+---
+title: Kubernetes Deployment
+description: Deploy Chroma on Kubernetes using Helm charts and manifests
+---
+
+Chroma provides official Helm charts for Kubernetes deployment, supporting both single-instance and distributed architectures.
+
+<Warning>
+  The distributed Chroma Kubernetes manifests are under active development. While suitable for testing and development, review thoroughly before production use.
+</Warning>
+
+## Prerequisites
+
+- Kubernetes cluster (1.19+)
+- kubectl configured
+- Helm 3.x installed
+- Persistent volume provisioner (for production)
+
+## Helm Chart Installation
+
+### Quick Start
+
+Deploy Chroma using the official Helm chart:
+
+```bash
+# Clone the Chroma repository
+git clone https://github.com/chroma-core/chroma.git
+cd chroma
+
+# Install the Helm chart
+helm install chroma ./k8s/distributed-chroma \
+  --namespace chroma \
+  --create-namespace
+```
+
+### Chart Information
+
+The Helm chart is located at `k8s/distributed-chroma/`:
+
+```yaml
+apiVersion: v2
+name: distributed-chroma
+description: A helm chart for distributed Chroma
+type: application
+version: 0.1.78
+appVersion: "0.4.24"
+keywords:
+  - chroma
+  - vector
+  - database
+  - retrieval
+  - llm
+  - rag
+home: "https://www.trychroma.com/"
+sources:
+  - "https://github.com/chroma-core/chroma"
+```
+
+## Configuration
+
+### Default Values
+
+The chart uses `k8s/distributed-chroma/values.yaml` for configuration:
+
+```yaml
+namespace: 'chroma'
+
+# Frontend Service (HTTP API)
+rustFrontendService:
+  image:
+    repository: 'rust-frontend-service'
+    tag: 'latest'
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: '2000m'
+      memory: '1Gi'
+    requests:
+      cpu: '1000m'
+      memory: '512Mi'
+
+# System Database
+sysdb:
+  image:
+    repository: 'sysdb'
+    tag: 'latest'
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: '2000m'
+      memory: '1Gi'
+    requests:
+      cpu: '1000m'
+      memory: '512Mi'
+
+# Log Service
+rustLogService:
+  image:
+    repository: 'rust-log-service'
+    tag: 'latest'
+  cache:
+    hostPath: '/local/cache/chroma-log-service'
+    type: DirectoryOrCreate
+    mountPath: '/cache/'
+
+# Query Service
+queryService:
+  image:
+    repository: 'query-service'
+    tag: 'latest'
+  replicaCount: 2
+  updateStrategy:
+    type: 'RollingUpdate'
+  cache:
+    hostPath: '/local/cache/chroma-query-service'
+    mountPath: '/cache/'
+
+# Compaction Service
+compactionService:
+  image:
+    repository: 'compaction-service'
+    tag: 'latest'
+  replicaCount: 1
+  cache:
+    hostPath: '/local/cache/chroma-compaction-service'
+    mountPath: '/cache/'
+
+# Garbage Collector
+garbageCollector:
+  image:
+    repository: 'garbage-collector'
+    tag: 'latest'
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: '200m'
+      memory: '256Mi'
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+
+# Database Migration
+sysdbMigration:
+  image:
+    repository: 'sysdb-migration'
+    tag: 'latest'
+  username: chroma
+  password: chroma
+  netloc: postgres
+  port: 5432
+  dbName: sysdb
+  sslmode: disable
+```
+
+### Custom Configuration
+
+Create a custom `values.yaml`:
+
+```yaml
+# custom-values.yaml
+namespace: 'my-chroma'
+
+rustFrontendService:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: '4000m'
+      memory: '2Gi'
+    requests:
+      cpu: '2000m'
+      memory: '1Gi'
+
+queryService:
+  replicaCount: 5
+  resources:
+    limits:
+      cpu: '4000m'
+      memory: '4Gi'
+```
+
+Install with custom values:
+
+```bash
+helm install chroma ./k8s/distributed-chroma \
+  --namespace my-chroma \
+  --create-namespace \
+  --values custom-values.yaml
+```
+
+## Architecture Components
+
+The distributed Chroma deployment includes:
+
+### Core Services
+
+1. **Frontend Service** (`rust-frontend-service`)
+   - HTTP API endpoint
+   - Routes requests to appropriate services
+   - Port: 8000
+
+2. **Query Service** (`query-service`)
+   - Handles vector similarity search
+   - Stateful set for distributed queries
+   - Port: 50051 (gRPC)
+
+3. **Log Service** (`rust-log-service`)
+   - Write-ahead log for durability
+   - Manages data ingestion
+   - Port: 50051 (gRPC)
+
+4. **Compaction Service** (`compaction-service`)
+   - Optimizes storage
+   - Merges and compacts segments
+
+5. **SysDB** (`sysdb`)
+   - Metadata and catalog storage
+   - PostgreSQL-backed
+   - Port: 50051 (gRPC)
+
+6. **Garbage Collector** (`garbage-collector`)
+   - Cleans up unused segments
+   - Manages storage lifecycle
+
+### Supporting Infrastructure
+
+- **PostgreSQL**: Metadata storage
+- **MemberList CRD**: Service discovery and membership
+- **Service Accounts & RBAC**: Security and permissions
+
+## Tilt for Local Development
+
+Tilt provides a complete local Kubernetes development environment.
+
+### Setup
+
+1. **Install Requirements**
+   ```bash
+   # Install Tilt
+   curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+   
+   # Install Helm
+   curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+   ```
+
+2. **Start Local Kubernetes**
+   ```bash
+   # macOS (OrbStack)
+   # Navigate to Kubernetes → Pods and select "Turn On"
+   
+   # Linux (Kind)
+   kind create cluster --name chroma-dev
+   ```
+
+3. **Deploy with Tilt**
+   ```bash
+   # From Chroma repository root
+   tilt up
+   ```
+
+### Tilt Features
+
+Tilt automatically:
+- Builds all Docker images from source
+- Deploys complete distributed architecture
+- Sets up observability stack:
+  - Grafana (dashboards)
+  - Jaeger (tracing)
+  - Prometheus (metrics)
+  - OpenTelemetry Collector
+- Watches for code changes and rebuilds
+- Provides unified dashboard at http://localhost:10350
+
+### Service Access
+
+Tilt exposes these ports:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend | 8000 | HTTP API |
+| Query Service | 50053 | gRPC |
+| Log Service | 50054 | gRPC |
+| SysDB | 50051 | gRPC |
+| Postgres | 5432 | Database |
+| MinIO | 9000 | Object storage |
+| Garbage Collector | 50055 | gRPC |
+
+### Tilt Configuration
+
+The `Tiltfile` defines the complete environment:
+
+```python
+# Tiltfile
+update_settings(max_parallel_updates=6)
+
+# Build images
+docker_build(
+  'rust-frontend-service',
+  '.',
+  only=["rust/", "idl/", "Cargo.toml", "Cargo.lock"],
+  dockerfile='./rust/Dockerfile',
+  target='cli'
+)
+
+# Deploy Helm chart
+k8s_yaml(
+  local(
+    'helm template ' +
+    '--set-file rustFrontendService.configuration=rust/frontend/sample_configs/distributed.yaml ' +
+    '--values k8s/distributed-chroma/values.yaml ' +
+    '--values k8s/distributed-chroma/values.dev.yaml ' +
+    'k8s/distributed-chroma'
+  )
+)
+
+# Configure resources
+k8s_resource(
+  'rust-frontend-service:deployment:chroma',
+  resource_deps=['sysdb:deployment:chroma', 'rust-log-service:statefulset:chroma'],
+  labels=["chroma"],
+  port_forwards='8000:8000'
+)
+```
+
+### Development Workflow
+
+```bash
+# Start development environment
+tilt up
+
+# View logs
+tilt logs rust-frontend-service
+
+# Trigger rebuild
+tilt trigger rust-frontend-service
+
+# Clean up
+tilt down
+```
+
+## Manual Kubernetes Deployment
+
+### Install Custom Resource Definitions
+
+```bash
+# Install MemberList CRD
+kubectl apply -f k8s/distributed-chroma/crds/memberlist_crd.yaml
+```
+
+### Deploy PostgreSQL
+
+```yaml
+# postgres.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: chroma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: chroma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_DB
+          value: sysdb
+        - name: POSTGRES_USER
+          value: chroma
+        - name: POSTGRES_PASSWORD
+          value: chroma
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+```
+
+```bash
+kubectl apply -f postgres.yaml
+```
+
+### Deploy Chroma Services
+
+```bash
+# Deploy using Helm
+helm install chroma ./k8s/distributed-chroma \
+  --namespace chroma \
+  --create-namespace \
+  --set rustFrontendService.configuration="$(cat rust/frontend/sample_configs/distributed.yaml)" \
+  --set rustLogService.configuration="$(cat rust/worker/chroma_config.yaml)"
+```
+
+## Scaling
+
+### Horizontal Scaling
+
+```bash
+# Scale query service
+kubectl scale statefulset query-service \
+  --namespace chroma \
+  --replicas=5
+
+# Scale frontend service
+kubectl scale deployment rust-frontend-service \
+  --namespace chroma \
+  --replicas=3
+```
+
+### Vertical Scaling
+
+Update resource requests/limits in values:
+
+```yaml
+queryService:
+  resources:
+    limits:
+      cpu: '8000m'
+      memory: '8Gi'
+    requests:
+      cpu: '4000m'
+      memory: '4Gi'
+```
+
+Apply changes:
+
+```bash
+helm upgrade chroma ./k8s/distributed-chroma \
+  --namespace chroma \
+  --values custom-values.yaml
+```
+
+## Storage Configuration
+
+### Persistent Volumes
+
+```yaml
+queryService:
+  cache:
+    # Use PVC instead of hostPath
+    storageClass: 'fast-ssd'
+    size: '100Gi'
+    mountPath: '/cache/'
+```
+
+### Storage Classes
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+```
+
+## Monitoring and Observability
+
+Tilt deploys a complete observability stack:
+
+### Grafana
+
+Access via Tilt dashboard or port-forward:
+
+```bash
+kubectl port-forward -n chroma svc/grafana 3000:3000
+```
+
+### Jaeger (Tracing)
+
+```bash
+kubectl port-forward -n chroma svc/jaeger 16686:16686
+```
+
+### Prometheus (Metrics)
+
+```bash
+kubectl port-forward -n chroma svc/prometheus 9090:9090
+```
+
+### Configure OpenTelemetry
+
+```yaml
+rustFrontendService:
+  env:
+    - name: CHROMA_OTEL_COLLECTION_ENDPOINT
+      value: "otel-collector.chroma.svc.cluster.local:4317"
+    - name: CHROMA_OTEL_SERVICE_NAME
+      value: "frontend-service"
+```
+
+## Troubleshooting
+
+### Check Pod Status
+
+```bash
+kubectl get pods -n chroma
+kubectl describe pod <pod-name> -n chroma
+kubectl logs <pod-name> -n chroma
+```
+
+### Debug MemberList
+
+```bash
+# Check MemberList resources
+kubectl get memberlists -n chroma
+kubectl describe memberlist query-service-memberlist -n chroma
+```
+
+### Database Connection Issues
+
+```bash
+# Test PostgreSQL connection
+kubectl run -it --rm psql --image=postgres:15 --restart=Never -n chroma -- \
+  psql -h postgres.chroma.svc.cluster.local -U chroma -d sysdb
+```
+
+### Service Communication
+
+```bash
+# Test gRPC connectivity
+kubectl run -it --rm grpcurl --image=fullstorydev/grpcurl --restart=Never -n chroma -- \
+  grpcurl -plaintext sysdb.chroma.svc.cluster.local:50051 list
+```
+
+## Upgrading
+
+```bash
+# Check current version
+helm list -n chroma
+
+# Update repository
+git pull origin main
+
+# Upgrade deployment
+helm upgrade chroma ./k8s/distributed-chroma \
+  --namespace chroma \
+  --values custom-values.yaml
+```
+
+## Uninstalling
+
+```bash
+# Uninstall Helm release
+helm uninstall chroma --namespace chroma
+
+# Remove namespace (optional)
+kubectl delete namespace chroma
+
+# Tilt cleanup
+tilt down
+```
+
+## Multi-Region Deployment
+
+Enable multi-region mode with Tilt:
+
+```bash
+MULTI_REGION=true tilt up
+```
+
+This deploys two Chroma clusters (`chroma` and `chroma2`) with cross-region replication.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cloud Providers" icon="cloud" href="/deployment/cloud-providers">
+    Deploy on AWS, GCP, or Azure
+  </Card>
+  <Card title="Configuration" icon="gear" href="/operations/configuration">
+    Advanced configuration options
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/operations/observability">
+    Monitor and debug your deployment
+  </Card>
+  <Card title="Performance" icon="gauge-high" href="/operations/performance">
+    Performance tuning and optimization
+  </Card>
+</CardGroup>

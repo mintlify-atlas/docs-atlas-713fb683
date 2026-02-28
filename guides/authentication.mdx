@@ -1,0 +1,450 @@
+---
+title: 'Authentication'
+description: 'Secure your Chroma deployment with authentication'
+---
+
+Chroma supports authentication for client-server deployments, allowing you to control access to your vector database.
+
+<Note>
+Authentication is only applicable to client-server deployments. If you're using Chroma in embedded mode, authentication is not available.
+</Note>
+
+## Authentication Overview
+
+### Architecture
+
+Chroma uses a client-side and server-side authentication model:
+
+1. **Client Authentication** - Clients prepare and send credentials with each request
+2. **Server Authentication** - Server validates credentials and identifies the user
+3. **Server Authorization** - Server checks if the user has permission for the requested operation
+
+### Preemptive Authentication
+
+Chroma uses preemptive authentication, meaning the client sends credentials with every request without waiting for a challenge from the server.
+
+<Warning>
+When using preemptive authentication, always use HTTPS in production to prevent credential exposure. Verify server certificates and use secure authentication providers.
+</Warning>
+
+## Built-in Authentication Providers
+
+### Basic Authentication
+
+#### Server Configuration
+
+```bash
+# Create password file
+export CHROMA_USER=admin
+export CHROMA_PASSWORD=admin
+docker run --rm --entrypoint htpasswd httpd:2 -Bbn ${CHROMA_USER} ${CHROMA_PASSWORD} > server.htpasswd
+
+# Start server with basic auth
+export CHROMA_SERVER_AUTHN_PROVIDER="chromadb.auth.basic_authn.BasicAuthenticationServerProvider"
+export CHROMA_SERVER_AUTHN_CREDENTIALS_FILE="./server.htpasswd"
+chroma run --host 0.0.0.0 --port 8000
+```
+
+Or with Docker Compose:
+
+```yaml
+version: '3.9'
+
+services:
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.basic_authn.BasicAuthenticationServerProvider
+      - CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=/chroma/server.htpasswd
+    volumes:
+      - ./server.htpasswd:/chroma/server.htpasswd
+      - chroma-data:/chroma/chroma
+    ports:
+      - 8000:8000
+
+volumes:
+  chroma-data:
+    driver: local
+```
+
+#### Client Configuration
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+client = chromadb.HttpClient(
+    host="localhost",
+    port=8000,
+    settings=Settings(
+        chroma_client_auth_provider="chromadb.auth.basic_authn.BasicAuthClientProvider",
+        chroma_client_auth_credentials="admin:admin"
+    )
+)
+
+# Test connection
+heartbeat = client.heartbeat()
+print(f"Connected: {heartbeat}")
+
+# Use client normally
+collections = client.list_collections()
+print(f"Collections: {collections}")
+```
+
+### Token Authentication
+
+#### Server Configuration
+
+```bash
+# Simple token (single token for all users)
+export CHROMA_SERVER_AUTHN_PROVIDER="chromadb.auth.token_authn.TokenAuthenticationServerProvider"
+export CHROMA_SERVER_AUTHN_CREDENTIALS="test-token"
+chroma run --host 0.0.0.0 --port 8000
+```
+
+For multiple users with different tokens, use a configuration file:
+
+```yaml
+# auth_config.yaml
+users:
+  - id: "admin"
+    tokens:
+      - "admin-token-12345"
+    tenant: "default_tenant"
+    databases: ["*"]
+  - id: "user1"
+    tokens:
+      - "user1-token-67890"
+    tenant: "default_tenant"
+    databases: ["db1", "db2"]
+```
+
+```bash
+export CHROMA_SERVER_AUTHN_PROVIDER="chromadb.auth.token_authn.TokenAuthenticationServerProvider"
+export CHROMA_SERVER_AUTHN_CREDENTIALS_FILE="./auth_config.yaml"
+chroma run
+```
+
+#### Client Configuration
+
+Default token header (Authorization: Bearer):
+
+```python
+client = chromadb.HttpClient(
+    settings=Settings(
+        chroma_client_auth_provider="chromadb.auth.token_authn.TokenAuthClientProvider",
+        chroma_client_auth_credentials="test-token"
+    )
+)
+```
+
+Custom token header:
+
+```python
+client = chromadb.HttpClient(
+    settings=Settings(
+        chroma_client_auth_provider="chromadb.auth.token_authn.TokenAuthClientProvider",
+        chroma_client_auth_credentials="test-token",
+        chroma_auth_token_transport_header="X-Chroma-Token"
+    )
+)
+```
+
+## Configuration Options
+
+### Server Settings
+
+From `chromadb/config.py`:
+
+```bash
+# Authentication provider
+CHROMA_SERVER_AUTHN_PROVIDER="chromadb.auth.basic_authn.BasicAuthenticationServerProvider"
+
+# Credentials (use one of these)
+CHROMA_SERVER_AUTHN_CREDENTIALS="inline-credentials"
+CHROMA_SERVER_AUTHN_CREDENTIALS_FILE="/path/to/credentials"
+
+# Authorization provider (optional)
+CHROMA_SERVER_AUTHZ_PROVIDER="chromadb.auth.simple_rbac_authz.SimpleRBACAuthorizationProvider"
+
+# Authorization config (use one of these)
+CHROMA_SERVER_AUTHZ_CONFIG="inline-config"
+CHROMA_SERVER_AUTHZ_CONFIG_FILE="/path/to/authz_config.yaml"
+
+# Token header (default: "Authorization")
+CHROMA_AUTH_TOKEN_TRANSPORT_HEADER="Authorization"
+
+# Ignore authentication for specific endpoints
+CHROMA_SERVER_AUTH_IGNORE_PATHS='{"<boltpathname>/api/v2/heartbeat": ["GET"]}'
+
+# Overwrite tenant/database access from auth
+CHROMA_OVERWRITE_SINGLETON_TENANT_DATABASE_ACCESS_FROM_AUTH=FALSE
+```
+
+### Client Settings
+
+```python
+from chromadb.config import Settings
+
+settings = Settings(
+    # Authentication provider class
+    chroma_client_auth_provider="chromadb.auth.basic_authn.BasicAuthClientProvider",
+    
+    # Credentials
+    chroma_client_auth_credentials="username:password",
+    
+    # Custom header (optional)
+    chroma_auth_token_transport_header="Authorization"
+)
+```
+
+## Authorization
+
+### User Identity
+
+Authentication providers return a `UserIdentity` object:
+
+```python
+from chromadb.auth import UserIdentity
+
+user = UserIdentity(
+    user_id="user123",
+    tenant="my_tenant",
+    databases=["db1", "db2"],
+    attributes={"role": "admin"}
+)
+```
+
+### Authorization Actions
+
+Available authorization actions from `chromadb/auth/__init__.py`:
+
+```python
+from chromadb.auth import AuthzAction
+
+# System actions
+AuthzAction.RESET
+
+# Tenant actions
+AuthzAction.CREATE_TENANT
+AuthzAction.GET_TENANT
+
+# Database actions
+AuthzAction.CREATE_DATABASE
+AuthzAction.GET_DATABASE
+AuthzAction.DELETE_DATABASE
+AuthzAction.LIST_DATABASES
+
+# Collection actions (database level)
+AuthzAction.LIST_COLLECTIONS
+AuthzAction.COUNT_COLLECTIONS
+AuthzAction.CREATE_COLLECTION
+AuthzAction.GET_OR_CREATE_COLLECTION
+
+# Collection operations
+AuthzAction.GET_COLLECTION
+AuthzAction.DELETE_COLLECTION
+AuthzAction.UPDATE_COLLECTION
+AuthzAction.ADD
+AuthzAction.DELETE
+AuthzAction.GET
+AuthzAction.QUERY
+AuthzAction.COUNT
+AuthzAction.UPDATE
+AuthzAction.UPSERT
+```
+
+### Authorization Resources
+
+```python
+from chromadb.auth import AuthzResource
+
+resource = AuthzResource(
+    tenant="default_tenant",
+    database="my_database",
+    collection="my_collection"
+)
+```
+
+## Custom Authentication Provider
+
+Create a custom authentication provider:
+
+```python
+from chromadb.auth import ServerAuthenticationProvider, UserIdentity
+from chromadb.config import System
+from typing import Dict
+
+class CustomAuthProvider(ServerAuthenticationProvider):
+    def __init__(self, system: System) -> None:
+        super().__init__(system)
+        # Load your authentication configuration
+        self._api_keys = self._load_api_keys()
+    
+    def _load_api_keys(self) -> Dict[str, UserIdentity]:
+        # Load API keys from database, file, etc.
+        return {
+            "key123": UserIdentity(
+                user_id="user1",
+                tenant="default_tenant",
+                databases=["*"]
+            )
+        }
+    
+    def authenticate_or_raise(self, headers: Dict[str, str]) -> UserIdentity:
+        # Extract and validate credentials
+        api_key = headers.get("X-API-Key")
+        
+        if not api_key:
+            raise ValueError("Missing X-API-Key header")
+        
+        user = self._api_keys.get(api_key)
+        if not user:
+            raise ValueError("Invalid API key")
+        
+        return user
+```
+
+Configure server to use custom provider:
+
+```bash
+export CHROMA_SERVER_AUTHN_PROVIDER="myapp.auth.CustomAuthProvider"
+```
+
+## Security Best Practices
+
+### Production Deployment
+
+1. **Always use HTTPS/SSL**
+
+```bash
+export CHROMA_SERVER_SSL_ENABLED=TRUE
+```
+
+2. **Store credentials securely**
+
+```bash
+# Use environment variables or secret management
+export CHROMA_SERVER_AUTHN_CREDENTIALS_FILE="/var/secrets/chroma_auth"
+```
+
+3. **Rotate credentials regularly**
+
+4. **Use strong passwords**
+
+```bash
+# Generate strong password
+openssl rand -base64 32
+```
+
+5. **Restrict network access**
+
+```bash
+# Bind to specific interface
+export CHROMA_SERVER_HOST="10.0.1.5"
+```
+
+### Client Security
+
+```python
+from chromadb.config import Settings
+
+# Use environment variables for credentials
+import os
+
+client = chromadb.HttpClient(
+    settings=Settings(
+        chroma_server_ssl_enabled=True,
+        chroma_server_ssl_verify=True,  # Verify certificates
+        chroma_client_auth_credentials=os.getenv("CHROMA_AUTH_CREDENTIALS")
+    )
+)
+```
+
+## Testing Authentication
+
+### Positive Test
+
+```python
+import chromadb
+from chromadb.config import Settings
+
+# Should succeed
+client = chromadb.HttpClient(
+    settings=Settings(
+        chroma_client_auth_provider="chromadb.auth.basic_authn.BasicAuthClientProvider",
+        chroma_client_auth_credentials="admin:admin"
+    )
+)
+
+try:
+    collections = client.list_collections()
+    print("✓ Authentication successful")
+except Exception as e:
+    print(f"✗ Authentication failed: {e}")
+```
+
+### Negative Test
+
+```python
+# Should fail
+client = chromadb.HttpClient()  # No credentials
+
+try:
+    client.list_collections()
+    print("✗ Should have been rejected")
+except Exception as e:
+    if "Unauthorized" in str(e):
+        print("✓ Correctly rejected unauthorized request")
+    else:
+        print(f"✗ Unexpected error: {e}")
+```
+
+## Troubleshooting
+
+### Authentication Failed
+
+```python
+# Check credentials format
+print(f"Credentials: {settings.chroma_client_auth_credentials}")
+
+# Verify server is running with auth
+curl -H "Authorization: Basic $(echo -n 'admin:admin' | base64)" http://localhost:8000/api/v2/heartbeat
+```
+
+### Wrong Provider
+
+Ensure client and server providers match:
+
+```bash
+# Server
+CHROMA_SERVER_AUTHN_PROVIDER="chromadb.auth.basic_authn.BasicAuthenticationServerProvider"
+```
+
+```python
+# Client
+chroma_client_auth_provider="chromadb.auth.basic_authn.BasicAuthClientProvider"
+```
+
+### SSL Certificate Errors
+
+```python
+# For development only - skip SSL verification
+settings = Settings(
+    chroma_server_ssl_verify=False  # Use with caution!
+)
+```
+
+### Public Endpoints
+
+Some endpoints are public by default (from `chromadb/config.py`):
+
+- `/api/v2` - GET
+- `/api/v2/heartbeat` - GET
+- `/api/v2/version` - GET
+
+To authenticate these, modify server settings:
+
+```bash
+export CHROMA_SERVER_AUTH_IGNORE_PATHS='{}'
+```

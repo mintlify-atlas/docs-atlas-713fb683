@@ -1,80 +1,194 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Chroma in under 5 minutes
 ---
 
-## Get started in three steps
+Get up and running with Chroma in minutes. This guide will walk you through installing Chroma and creating your first vector database.
 
-Get your documentation site running locally and make your first customization.
+## Installation
 
-### Step 1: Set up your local environment
+<CodeGroup>
+```bash Python
+pip install chromadb
+```
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+```bash JavaScript
+npm install chromadb
+```
+</CodeGroup>
+
+## Basic example
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import chromadb
+
+    # Create a Chroma client
+    client = chromadb.Client()
+
+    # Create a collection
+    collection = client.create_collection(name="my_collection")
+
+    # Add documents
+    collection.add(
+        documents=[
+            "This is a document about pineapple",
+            "This is a document about oranges"
+        ],
+        ids=["id1", "id2"]
+    )
+
+    # Query the collection
+    results = collection.query(
+        query_texts=["This is a query about fruit"],
+        n_results=2
+    )
+
+    print(results)
+    ```
+  </Tab>
+  
+  <Tab title="JavaScript">
+    ```javascript
+    import { ChromaClient } from "chromadb";
+
+    // Create a Chroma client
+    const client = new ChromaClient();
+
+    // Create a collection
+    const collection = await client.createCollection({
+      name: "my_collection"
+    });
+
+    // Add documents
+    await collection.add({
+      ids: ["id1", "id2"],
+      documents: [
+        "This is a document about pineapple",
+        "This is a document about oranges"
+      ]
+    });
+
+    // Query the collection
+    const results = await collection.query({
+      queryTexts: ["This is a query about fruit"],
+      nResults: 2
+    });
+
+    console.log(results);
+    ```
+  </Tab>
+</Tabs>
+
+## Expected output
+
+```python
+{
+  'ids': [['id1', 'id2']],
+  'distances': [[1.0, 1.2]],
+  'documents': [['This is a document about pineapple', 
+                 'This is a document about oranges']],
+  'metadatas': [[None, None]]
+}
+```
+
+Chroma automatically:
+- Generates embeddings using the default model
+- Stores embeddings in the collection  
+- Finds the most similar documents when you query
+
+## What's happening?
+
+<Steps>
+  <Step title="Create a client">
+    The client connects to Chroma. By default, it runs in-memory for quick prototyping.
+  </Step>
+  
+  <Step title="Create a collection">
+    Collections store your embeddings, documents, and metadata.
+  </Step>
+  
+  <Step title="Add documents">
+    Chroma automatically generates embeddings for your documents using the default embedding function.
+  </Step>
+  
+  <Step title="Query">
+    Query with natural language. Chroma finds the most similar documents using vector similarity search.
+  </Step>
+</Steps>
+
+## Client types
+
+Choose the right client for your use case:
+
+<Tabs>
+  <Tab title="In-Memory (Default)">
+    ```python
+    import chromadb
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    # Ephemeral client - data is cleared when program exits
+    client = chromadb.Client()
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    Perfect for: Testing, prototyping, Jupyter notebooks
+  </Tab>
+  
+  <Tab title="Persistent">
+    ```python
+    import chromadb
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    # Data persists to disk
+    client = chromadb.PersistentClient(path="./chroma_db")
+    ```
+    
+    Perfect for: Local development, small applications
+  </Tab>
+  
+  <Tab title="Client-Server">
+    ```python
+    import chromadb
+    
+    # Connect to a Chroma server
+    client = chromadb.HttpClient(host="localhost", port=8000)
+    ```
+    
+    Perfect for: Production deployments, distributed systems
+    
+    <Note>
+    Run the server with: `chroma run --path ./chroma_db`
+    </Note>
+  </Tab>
+  
+  <Tab title="Chroma Cloud">
+    ```python
+    import chromadb
+    
+    # Connect to Chroma Cloud
+    client = chromadb.CloudClient(
+        tenant="my-tenant",
+        database="my-database",
+        api_key="your-api-key"
+    )
+    ```
+    
+    Perfect for: Serverless, managed deployments
+  </Tab>
+</Tabs>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Core Concepts" icon="book" href="/concepts/collections">
+    Learn about collections, embeddings, and metadata
+  </Card>
+  <Card title="Embedding Functions" icon="brain" href="/guides/embedding-functions">
+    Use OpenAI, Cohere, or custom embeddings
+  </Card>
+  <Card title="Filtering" icon="filter" href="/guides/filtering">
+    Filter results using metadata
+  </Card>
+  <Card title="Deployment" icon="server" href="/deployment/overview">
+    Deploy Chroma to production
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

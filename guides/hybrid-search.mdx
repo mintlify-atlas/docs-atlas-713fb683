@@ -1,0 +1,458 @@
+---
+title: 'Hybrid Search'
+description: 'Combine vector similarity and full-text search for better results'
+---
+
+Hybrid search combines vector similarity search with keyword-based full-text search to provide more accurate and comprehensive results. This guide shows you how to implement hybrid search in Chroma.
+
+## What is Hybrid Search?
+
+Hybrid search leverages two complementary approaches:
+
+1. **Vector Search (KNN)** - Finds semantically similar content using embedding vectors
+2. **Full-Text Search (BM25)** - Finds keyword matches using traditional information retrieval
+
+Results are combined using **Reciprocal Rank Fusion (RRF)** to produce a unified ranking.
+
+## Basic Hybrid Search
+
+### Setting Up
+
+First, create a collection with hybrid search support:
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+from chromadb.utils.embedding_functions import ChromaBM25EmbeddingFunction
+
+client = chromadb.Client()
+
+# Create embedding functions
+vector_ef = DefaultEmbeddingFunction()
+bm25_ef = ChromaBM25EmbeddingFunction()
+
+collection = client.create_collection(
+    name="hybrid_collection",
+    embedding_function=vector_ef,
+    metadata={"hnsw:space": "cosine"}
+)
+```
+
+### Adding Documents
+
+```python
+collection.add(
+    documents=[
+        "The quick brown fox jumps over the lazy dog",
+        "Machine learning is a subset of artificial intelligence",
+        "Python is a popular programming language for data science",
+        "Neural networks are inspired by biological neural networks",
+        "Deep learning uses multiple layers of neural networks"
+    ],
+    ids=["doc1", "doc2", "doc3", "doc4", "doc5"]
+)
+```
+
+### Performing Hybrid Search
+
+```python
+from chromadb.search import Knn, Rrf
+
+# Hybrid search: combines vector similarity and keyword matching
+results = collection.search(
+    search=[
+        Knn(
+            query_texts=["machine learning algorithms"],
+            n_results=10
+        ),
+        Rrf(
+            query_texts=["machine learning algorithms"]
+        )
+    ],
+    n_results=5
+)
+
+for i, (id, doc, distance) in enumerate(zip(
+    results['ids'][0],
+    results['documents'][0],
+    results['distances'][0]
+)):
+    print(f"{i+1}. [{id}] {doc} (score: {distance:.3f})")
+```
+
+## Understanding the Components
+
+### KNN (K-Nearest Neighbors)
+
+Vector similarity search finds semantically similar content:
+
+```python
+from chromadb.search import Knn
+
+# Pure vector search
+results = collection.search(
+    search=[Knn(
+        query_texts=["artificial intelligence"],
+        n_results=5
+    )]
+)
+```
+
+KNN is excellent for:
+- Finding semantically related content
+- Handling synonyms and paraphrases
+- Cross-lingual search (with multilingual models)
+
+### BM25 (Full-Text Search)
+
+Keyword-based search using the BM25 algorithm:
+
+```python
+# Full-text search with BM25
+results = collection.search(
+    search=[Rrf(
+        query_texts=["Python programming"],
+        k=60  # RRF parameter
+    )]
+)
+```
+
+BM25 excels at:
+- Exact keyword matching
+- Technical terms and jargon
+- Proper nouns and specific phrases
+
+### RRF (Reciprocal Rank Fusion)
+
+Combines multiple search results:
+
+```python
+# Hybrid search with custom RRF parameter
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=20),
+        Rrf(query_texts=["query"], k=60)
+    ],
+    n_results=10
+)
+```
+
+The `k` parameter controls the fusion:
+- Lower `k` (e.g., 20): Emphasizes top-ranked results
+- Higher `k` (e.g., 100): Gives more weight to lower-ranked results
+- Default: `k=60` (balanced)
+
+## Advanced Hybrid Search
+
+### With Metadata Filtering
+
+```python
+# Add documents with metadata
+collection.add(
+    documents=[
+        "Introduction to machine learning",
+        "Advanced deep learning techniques",
+        "Python for beginners"
+    ],
+    metadatas=[
+        {"category": "ml", "level": "beginner"},
+        {"category": "ml", "level": "advanced"},
+        {"category": "programming", "level": "beginner"}
+    ],
+    ids=["doc1", "doc2", "doc3"]
+)
+
+# Hybrid search with filters
+results = collection.search(
+    search=[
+        Knn(
+            query_texts=["learning Python"],
+            n_results=10,
+            where={"category": "programming"}
+        ),
+        Rrf(
+            query_texts=["learning Python"],
+            where={"category": "programming"}
+        )
+    ],
+    n_results=5
+)
+```
+
+### Multi-Query Hybrid Search
+
+Search with multiple queries:
+
+```python
+# Search multiple queries simultaneously
+queries = [
+    "machine learning algorithms",
+    "deep learning models"
+]
+
+results = collection.search(
+    search=[
+        Knn(query_texts=queries, n_results=10),
+        Rrf(query_texts=queries)
+    ],
+    n_results=5
+)
+
+# Results are returned per query
+for query_idx, query in enumerate(queries):
+    print(f"\nResults for: {query}")
+    for doc in results['documents'][query_idx]:
+        print(f"  - {doc}")
+```
+
+### Custom Scoring
+
+Adjust the balance between vector and keyword search:
+
+```python
+# Emphasize vector search (more results from KNN)
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=30),  # More KNN results
+        Rrf(query_texts=["query"], k=100)  # Less weight to BM25
+    ],
+    n_results=10
+)
+
+# Emphasize keyword search (more results from BM25)
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=10),  # Fewer KNN results
+        Rrf(query_texts=["query"], k=20)  # More weight to BM25
+    ],
+    n_results=10
+)
+```
+
+## Using BM25 Embedding Function
+
+Chroma provides a built-in BM25 embedding function for full-text search:
+
+```python
+from chromadb.utils.embedding_functions import ChromaBM25EmbeddingFunction
+
+# Create BM25 embedding function
+bm25_ef = ChromaBM25EmbeddingFunction()
+
+# Create collection with BM25
+bm25_collection = client.create_collection(
+    name="bm25_collection",
+    embedding_function=bm25_ef
+)
+
+# Add documents
+bm25_collection.add(
+    documents=[
+        "Document about Python programming",
+        "Tutorial on machine learning",
+        "Guide to data science"
+    ],
+    ids=["1", "2", "3"]
+)
+
+# Search with BM25
+results = bm25_collection.query(
+    query_texts=["Python data science"],
+    n_results=3
+)
+```
+
+## Real-World Use Cases
+
+### E-commerce Product Search
+
+```python
+# Combine semantic understanding with exact matches
+results = collection.search(
+    search=[
+        Knn(
+            query_texts=["comfortable running shoes"],
+            n_results=20,
+            where={"in_stock": True}
+        ),
+        Rrf(
+            query_texts=["comfortable running shoes"],
+            where={"in_stock": True}
+        )
+    ],
+    n_results=10
+)
+```
+
+Benefits:
+- Finds products by features (semantic)
+- Matches exact brand/model names (keyword)
+- Ranks by relevance (hybrid)
+
+### Document Retrieval
+
+```python
+# Find relevant documents with specific terms
+results = collection.search(
+    search=[
+        Knn(
+            query_texts=["quarterly financial performance"],
+            n_results=20,
+            where={"year": 2024}
+        ),
+        Rrf(
+            query_texts=["quarterly financial performance"],
+            where={"year": 2024},
+            k=40  # Emphasize keyword matching for exact terms
+        )
+    ],
+    n_results=5
+)
+```
+
+### Question Answering
+
+```python
+# Find answers to user questions
+def search_for_answer(question: str):
+    results = collection.search(
+        search=[
+            Knn(
+                query_texts=[question],
+                n_results=15,
+                where={"type": "answer"}
+            ),
+            Rrf(
+                query_texts=[question],
+                where={"type": "answer"}
+            )
+        ],
+        n_results=3
+    )
+    return results['documents'][0][0]
+
+answer = search_for_answer("How do I install Python?")
+print(answer)
+```
+
+## Performance Optimization
+
+### Tuning Parameters
+
+```python
+# For better precision (more relevant, fewer results)
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=10),
+        Rrf(query_texts=["query"], k=30)
+    ],
+    n_results=5
+)
+
+# For better recall (more comprehensive results)
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=50),
+        Rrf(query_texts=["query"], k=100)
+    ],
+    n_results=20
+)
+```
+
+### Caching
+
+```python
+from functools import lru_cache
+
+@lru_cache(maxsize=100)
+def cached_hybrid_search(query: str):
+    return collection.search(
+        search=[
+            Knn(query_texts=[query], n_results=10),
+            Rrf(query_texts=[query])
+        ],
+        n_results=5
+    )
+```
+
+### Batch Processing
+
+```python
+# Search multiple queries efficiently
+queries = ["query1", "query2", "query3"]
+
+results = collection.search(
+    search=[
+        Knn(query_texts=queries, n_results=10),
+        Rrf(query_texts=queries)
+    ],
+    n_results=5
+)
+```
+
+## Comparison: Hybrid vs. Single Method
+
+### When to Use Hybrid Search
+
+✅ Use hybrid search when:
+- You need both semantic and exact matching
+- Queries contain technical terms or proper nouns
+- You want robust results across query types
+- Handling diverse user queries
+
+### When to Use Vector Search Only
+
+✅ Use vector search when:
+- Semantic similarity is more important than keywords
+- Working with multilingual content
+- Queries are questions or natural language
+- Handling paraphrases and synonyms
+
+### When to Use Keyword Search Only
+
+✅ Use keyword search when:
+- Exact term matching is critical
+- Searching for codes, IDs, or specific phrases
+- Working with structured data
+- Speed is the priority
+
+## Troubleshooting
+
+### Poor Hybrid Results
+
+```python
+# Adjust the balance
+# Too much weight on keywords? Increase KNN results
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=30),  # More vector results
+        Rrf(query_texts=["query"], k=80)  # Reduce keyword weight
+    ],
+    n_results=10
+)
+```
+
+### No BM25 Results
+
+Ensure collection has enough documents and diverse vocabulary:
+
+```python
+# Check collection size
+count = collection.count()
+if count < 10:
+    print("Collection too small for effective BM25")
+```
+
+### Slow Hybrid Queries
+
+```python
+# Reduce search space
+results = collection.search(
+    search=[
+        Knn(query_texts=["query"], n_results=5),  # Fewer results
+        Rrf(query_texts=["query"])
+    ],
+    n_results=3,
+    where={"recent": True}  # Pre-filter with metadata
+)
+```

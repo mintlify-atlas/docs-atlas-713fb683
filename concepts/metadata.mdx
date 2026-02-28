@@ -1,0 +1,445 @@
+---
+title: Metadata
+description: Understanding metadata in Chroma and how to filter on it
+---
+
+Metadata provides additional context about your documents, enabling powerful filtering and organization capabilities.
+
+## What is Metadata?
+
+Metadata is structured information attached to each record in your collection. It consists of key-value pairs that describe attributes of your documents:
+
+```python
+collection.add(
+    documents=["The quick brown fox"],
+    metadatas=[{"source": "fables", "author": "Aesop", "year": 1867}],
+    ids=["doc1"]
+)
+```
+
+## Supported Data Types
+
+Chroma supports several metadata value types:
+
+### Primitive Types
+
+```python
+from chromadb.base_types import Metadata
+
+metadata: Metadata = {
+    "title": "Document Title",        # str
+    "page_number": 42,                # int
+    "confidence": 0.95,               # float
+    "is_published": True,             # bool
+    "optional_field": None            # None (optional fields)
+}
+```
+
+### List Types
+
+Metadata values can be lists of primitive types:
+
+```python
+metadata = {
+    "tags": ["science", "technology", "AI"],  # List[str]
+    "page_numbers": [1, 2, 3, 4],              # List[int]
+    "scores": [0.8, 0.9, 0.95],                # List[float]
+    "flags": [True, False, True]               # List[bool]
+}
+```
+
+<Note>
+Lists must be:
+- Non-empty
+- Homogeneous (all elements same type)
+- Contain only `str`, `int`, `float`, or `bool`
+</Note>
+
+### Sparse Vectors
+
+Store sparse vector data efficiently in metadata:
+
+```python
+from chromadb.api.types import SparseVector
+
+sparse_vector = SparseVector(
+    indices=[0, 5, 100, 1000],           # Dimension indices
+    values=[0.5, 0.3, 0.8, 0.1],         # Corresponding values  
+    labels=["apple", "orange", "banana", "grape"]  # Optional
+)
+
+metadata = {
+    "title": "Document",
+    "sparse_embedding": sparse_vector    # SparseVector in metadata
+}
+
+collection.add(
+    documents=["Document text"],
+    metadatas=[metadata],
+    ids=["doc1"]
+)
+```
+
+Sparse vectors in metadata:
+- Must have sorted, unique indices
+- All arrays must have matching lengths
+- Validated automatically via `__post_init__`
+
+## Reserved Keys
+
+Chroma reserves certain metadata keys for internal use:
+
+```python
+# Reserved key - do not use
+metadata = {
+    "chroma:document": "text"  # Error! Reserved key
+}
+```
+
+Avoid keys starting with `chroma:` to prevent conflicts.
+
+## Adding Metadata
+
+### Single Record
+
+```python
+collection.add(
+    ids=["doc1"],
+    documents=["Document text"],
+    metadatas=[{"category": "news", "date": "2024-01-01"}]
+)
+```
+
+### Multiple Records
+
+```python
+collection.add(
+    ids=["doc1", "doc2", "doc3"],
+    documents=["Text 1", "Text 2", "Text 3"],
+    metadatas=[
+        {"category": "news", "priority": 1},
+        {"category": "blog", "priority": 2},
+        {"category": "news", "priority": 1}
+    ]
+)
+```
+
+### Without Documents
+
+You can add records with embeddings and metadata but no documents:
+
+```python
+collection.add(
+    ids=["doc1"],
+    embeddings=[[0.1, 0.2, 0.3]],
+    metadatas=[{"source": "external"}]
+)
+```
+
+## Updating Metadata
+
+Update metadata for existing records:
+
+```python
+collection.update(
+    ids=["doc1"],
+    metadatas=[{"category": "updated", "reviewed": True}]
+)
+```
+
+This replaces the entire metadata for the specified IDs.
+
+## Filtering with Metadata
+
+Use the `where` parameter to filter results based on metadata:
+
+### Basic Equality
+
+```python
+results = collection.get(
+    where={"category": "news"}
+)
+```
+
+### Comparison Operators
+
+```python
+# Greater than
+results = collection.get(
+    where={"year": {"$gt": 2020}}
+)
+
+# Greater than or equal
+results = collection.get(
+    where={"score": {"$gte": 0.8}}
+)
+
+# Less than
+results = collection.get(
+    where={"priority": {"$lt": 5}}
+)
+
+# Less than or equal  
+results = collection.get(
+    where={"priority": {"$lte": 3}}
+)
+
+# Not equal
+results = collection.get(
+    where={"status": {"$ne": "draft"}}
+)
+```
+
+### List Operators
+
+```python
+# In list
+results = collection.get(
+    where={"category": {"$in": ["news", "blog", "article"]}}
+)
+
+# Not in list
+results = collection.get(
+    where={"status": {"$nin": ["draft", "archived"]}}
+)
+```
+
+### Array Membership Operators
+
+```python
+# Array contains value
+results = collection.get(
+    where={"tags": {"$contains": "python"}}
+)
+
+# Array does not contain value
+results = collection.get(
+    where={"tags": {"$not_contains": "deprecated"}}
+)
+```
+
+### Logical Operators
+
+Combine multiple conditions:
+
+```python
+# AND - all conditions must be true
+results = collection.get(
+    where={
+        "$and": [
+            {"category": "news"},
+            {"year": {"$gte": 2020}}
+        ]
+    }
+)
+
+# OR - at least one condition must be true
+results = collection.get(
+    where={
+        "$or": [
+            {"category": "news"},
+            {"category": "blog"}
+        ]
+    }
+)
+
+# Complex nested logic
+results = collection.get(
+    where={
+        "$and": [
+            {"year": {"$gte": 2020}},
+            {
+                "$or": [
+                    {"category": "news"},
+                    {"priority": {"$gte": 8}}
+                ]
+            }
+        ]
+    }
+)
+```
+
+## Filtering Documents
+
+Filter based on document content using `where_document`:
+
+```python
+# Contains substring
+results = collection.get(
+    where_document={"$contains": "machine learning"}
+)
+
+# Does not contain substring
+results = collection.get(
+    where_document={"$not_contains": "deprecated"}
+)
+
+# Regex match
+results = collection.get(
+    where_document={"$regex": "^Chapter [0-9]+"}
+)
+
+# Regex not match
+results = collection.get(
+    where_document={"$not_regex": "confidential"}
+)
+```
+
+### Combining Metadata and Document Filters
+
+```python
+results = collection.get(
+    where={"category": "technical"},
+    where_document={"$contains": "python"}
+)
+```
+
+## Querying with Filters
+
+Combine similarity search with metadata filtering:
+
+```python
+results = collection.query(
+    query_texts=["artificial intelligence"],
+    n_results=10,
+    where={"category": "research", "year": {"$gte": 2020}},
+    where_document={"$contains": "neural network"}
+)
+```
+
+This finds the 10 most similar documents that:
+- Are in the "research" category
+- Were published in 2020 or later
+- Contain "neural network" in the text
+
+## Type Definitions
+
+From `chromadb/base_types.py`:
+
+```python
+from typing import Mapping, Optional, Union, List
+
+MetadataListValue = List[Union[str, int, float, bool]]
+
+Metadata = Mapping[
+    str,
+    Optional[Union[str, int, float, bool, SparseVector, MetadataListValue]]
+]
+
+UpdateMetadata = Mapping[
+    str,
+    Union[int, float, str, bool, SparseVector, MetadataListValue, None]
+]
+```
+
+## Validation
+
+Chroma validates metadata to ensure data integrity:
+
+```python
+# Valid metadata
+valid = {
+    "title": "Document",           # str ✓
+    "count": 42,                   # int ✓
+    "score": 0.95,                 # float ✓
+    "published": True,             # bool ✓
+    "tags": ["a", "b", "c"],      # List[str] ✓
+    "optional": None               # None ✓
+}
+
+# Invalid metadata
+invalid = {
+    "nested": {"key": "value"},   # Nested dicts not allowed ✗
+    "mixed": ["string", 123],      # Mixed types in list ✗
+    "empty_list": [],              # Empty lists not allowed ✗
+    "chroma:reserved": "value"     # Reserved key ✗
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use consistent metadata schemas">
+    Define a consistent structure for metadata across records:
+    ```python
+    # Good - consistent schema
+    metadatas = [
+        {"title": "Doc 1", "author": "Alice", "year": 2023},
+        {"title": "Doc 2", "author": "Bob", "year": 2024},
+    ]
+    
+    # Avoid - inconsistent fields
+    metadatas = [
+        {"title": "Doc 1", "author": "Alice"},
+        {"name": "Doc 2", "writer": "Bob"},  # Different keys
+    ]
+    ```
+  </Accordion>
+
+  <Accordion title="Index frequently filtered fields">
+    Plan your metadata based on how you'll query:
+    ```python
+    # If you'll filter by category and date frequently:
+    metadata = {
+        "category": "news",      # Will use in where clauses
+        "published_date": "2024-01-01",
+        "author": "Alice",       # Less frequently filtered
+        "word_count": 1500       # Rarely filtered
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use appropriate data types">
+    Choose the right type for your data:
+    ```python
+    # Good - appropriate types
+    metadata = {
+        "year": 2024,           # int for years, enables $gt/$lt
+        "score": 0.95,          # float for decimals
+        "published": True,      # bool for flags
+        "tags": ["a", "b"]     # List for multiple values
+    }
+    
+    # Avoid - suboptimal types  
+    metadata = {
+        "year": "2024",         # String makes comparison harder
+        "score": "0.95",        # String can't use numeric operators
+        "tag1": "a", "tag2": "b"  # Use list instead
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Normalize metadata values">
+    Use consistent formatting and casing:
+    ```python
+    # Good - normalized
+    metadata = {
+        "category": "news",           # Lowercase
+        "status": "published",        # Consistent values
+    }
+    
+    # Avoid - inconsistent
+    metadata = {
+        "category": "News",           # Mixed case
+        "status": "Published ",       # Extra whitespace
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Querying" icon="magnifying-glass" href="/concepts/querying">
+    Learn about querying with metadata filters
+  </Card>
+  <Card title="Collections" icon="folder" href="/concepts/collections">
+    Understand collection organization
+  </Card>
+  <Card title="Filtering Guide" icon="filter" href="/guides/filtering">
+    Advanced filtering techniques
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/python/collection">
+    Collection API methods
+  </Card>
+</CardGroup>

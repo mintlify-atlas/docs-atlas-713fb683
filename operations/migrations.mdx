@@ -1,0 +1,505 @@
+---
+title: Schema Migrations
+description: Manage database schema migrations and version upgrades
+---
+
+## Overview
+
+Chroma uses a migration system to safely upgrade database schemas across versions. Migrations ensure your data remains consistent and compatible as Chroma evolves. This guide covers the migration system, upgrading procedures, and best practices.
+
+## Migration System
+
+Chroma's migration system is built into the database layer and manages schema changes across multiple subsystems.
+
+### How Migrations Work
+
+Migrations are:
+- **Version-numbered** - Each migration has a unique version number (e.g., `00001`, `00002`)
+- **Scope-specific** - Different database implementations (SQLite, PostgreSQL) have separate migrations
+- **Hash-verified** - Migration file contents are hashed to detect tampering
+- **Sequential** - Migrations must be applied in order
+- **Idempotent** - Safe to run multiple times
+
+### Migration Files
+
+Migration files follow the naming convention:
+
+```
+<version>-<description>.<scope>.sql
+```
+
+Examples:
+- `00001-collections.sqlite.sql`
+- `00002-segments.sqlite.sql`
+- `00003-collection-dimension.sqlite.sql`
+- `00004-tenants-databases.sqlite.sql`
+
+### Migration Subsystems
+
+Chroma manages migrations for three subsystems:
+
+1. **SysDB** (`chromadb/migrations/sysdb/`) - System database for collections, segments, tenants
+2. **Embeddings Queue** (`chromadb/migrations/embeddings_queue/`) - Write-ahead log for embeddings
+3. **MetaDB** (`chromadb/migrations/metadb/`) - Metadata and configuration storage
+
+## Configuration
+
+### Migration Modes
+
+Control migration behavior with the `migrations` setting:
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+# Apply migrations automatically (default)
+client = chromadb.Client(Settings(
+    migrations="apply"
+))
+
+# Validate migrations only (no changes)
+client = chromadb.Client(Settings(
+    migrations="validate"
+))
+
+# Skip migrations entirely
+client = chromadb.Client(Settings(
+    migrations="none"
+))
+```
+
+Or via environment variable:
+
+```bash
+export MIGRATIONS=apply  # or validate, none
+```
+
+#### Migration Mode Descriptions
+
+- **`apply`** (default) - Automatically apply all pending migrations
+- **`validate`** - Check that all migrations are applied, raise error if not
+- **`none`** - Skip migration checks entirely (not recommended)
+
+### Hash Algorithm
+
+Migrations use a hash algorithm to verify file integrity:
+
+```python
+client = chromadb.Client(Settings(
+    migrations_hash_algorithm="sha256"  # or "md5" (default)
+))
+```
+
+Or via environment variable:
+
+```bash
+export MIGRATIONS_HASH_ALGORITHM=sha256
+```
+
+**Important:** Once set and migrations are applied, you cannot change the hash algorithm without manual intervention.
+
+## Upgrading Chroma
+
+### Standard Upgrade Process
+
+For most upgrades, simply update the package:
+
+```bash
+pip install --upgrade chromadb
+```
+
+Migrations run automatically on first startup:
+
+```python
+import chromadb
+
+# Migrations apply automatically
+client = chromadb.Client(Settings(
+    is_persistent=True,
+    persist_directory="./chroma_data"
+))
+```
+
+### Upgrading from Legacy Versions
+
+If upgrading from versions before 0.4.0, use the `chroma-migrate` tool:
+
+```bash
+# Install migration tool
+pip install chroma-migrate
+
+# Run migration
+chroma-migrate
+```
+
+See the [Migration Guide](https://docs.trychroma.com/deployment/migration) for detailed instructions.
+
+### Version Compatibility
+
+Chroma follows semantic versioning:
+
+- **Major versions** (e.g., 1.0.0 → 2.0.0) - May require manual migration
+- **Minor versions** (e.g., 0.4.0 → 0.5.0) - Automatic migrations
+- **Patch versions** (e.g., 0.4.1 → 0.4.2) - No migrations needed
+
+## Migration Validation
+
+### Pre-Upgrade Validation
+
+Before upgrading, validate your current state:
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+# This will raise an exception if migrations are needed
+client = chromadb.Client(Settings(
+    migrations="validate",
+    is_persistent=True,
+    persist_directory="./chroma_data"
+))
+```
+
+### Migration Status
+
+Check applied migrations in the database:
+
+```python
+import sqlite3
+
+conn = sqlite3.connect("./chroma_data/chroma.sqlite3")
+cursor = conn.cursor()
+
+# View all applied migrations
+cursor.execute("""
+    SELECT dir, version, filename, hash
+    FROM migrations
+    ORDER BY dir, version
+""")
+
+for row in cursor.fetchall():
+    print(f"{row[0]}: v{row[1]} - {row[2]} ({row[3][:8]}...)")
+
+conn.close()
+```
+
+Output:
+```
+sysdb: v1 - 00001-collections.sqlite.sql (a1b2c3d4...)
+sysdb: v2 - 00002-segments.sqlite.sql (e5f6g7h8...)
+sysdb: v3 - 00003-collection-dimension.sqlite.sql (i9j0k1l2...)
+...
+```
+
+## Manual Migration Procedures
+
+### Backing Up Data
+
+Always backup before migrating:
+
+```bash
+# Backup persistent directory
+cp -r ./chroma_data ./chroma_data.backup
+
+# Or backup just the database
+cp ./chroma_data/chroma.sqlite3 ./chroma_data/chroma.sqlite3.backup
+```
+
+### Applying Migrations Manually
+
+In rare cases, you may need to apply migrations manually:
+
+```python
+from chromadb.db.impl.sqlite import SqliteDB
+from chromadb.config import System, Settings
+
+# Create system with migrations disabled
+system = System(Settings(
+    migrations="none",
+    is_persistent=True,
+    persist_directory="./chroma_data"
+))
+
+db = system.instance(SqliteDB)
+db.start()
+
+# Apply migrations
+db.apply_migrations()
+
+db.stop()
+```
+
+### Rolling Back Migrations
+
+Chroma does not support automatic rollback. To rollback:
+
+1. Stop Chroma
+2. Restore from backup
+3. Downgrade Chroma version
+
+```bash
+# Restore backup
+rm -rf ./chroma_data
+mv ./chroma_data.backup ./chroma_data
+
+# Install previous version
+pip install chromadb==0.4.24
+```
+
+## Migration Errors
+
+### UninitializedMigrationsError
+
+**Error:** `Migrations have not been initialized`
+
+**Cause:** Migration table doesn't exist
+
+**Solution:**
+```python
+client = chromadb.Client(Settings(
+    migrations="apply"  # Will create migration table
+))
+```
+
+### UnappliedMigrationsError
+
+**Error:** `Unapplied migrations in <dir>, starting with version <N>`
+
+**Cause:** New migrations exist that haven't been applied
+
+**Solution:**
+```python
+# Apply pending migrations
+client = chromadb.Client(Settings(
+    migrations="apply"
+))
+```
+
+### InconsistentVersionError
+
+**Error:** `Inconsistent migration versions in <dir>`
+
+**Cause:** Migration sequence has been modified
+
+**Solution:**
+1. Restore original migration files
+2. Or restore from backup and re-migrate
+
+### InconsistentHashError
+
+**Error:** `Inconsistent hashes in <path>`
+
+**Cause:** Migration file has been modified after being applied
+
+**Solution:**
+1. Restore original migration file from the correct Chroma version
+2. Or restore from backup
+
+## Custom Migrations
+
+### Creating Custom Migrations
+
+For advanced use cases, you can add custom migrations:
+
+```sql
+-- 99999-custom-indexes.sqlite.sql
+CREATE INDEX IF NOT EXISTS idx_custom_field
+ON collections(custom_field);
+
+CREATE INDEX IF NOT EXISTS idx_created_at
+ON segments(created_at);
+```
+
+Place in migration directory:
+```
+chromadb/migrations/sysdb/99999-custom-indexes.sqlite.sql
+```
+
+**Warning:** Custom migrations may conflict with future Chroma updates. Use version numbers > 90000 to minimize conflicts.
+
+## Production Migration Strategy
+
+### Pre-Production Testing
+
+1. **Test in staging environment**
+   ```bash
+   # Copy production data to staging
+   cp -r /prod/chroma_data /staging/chroma_data
+   
+   # Test migration in staging
+   cd /staging
+   pip install chromadb==<new-version>
+   python test_migration.py
+   ```
+
+2. **Verify migration success**
+   ```python
+   import chromadb
+   
+   client = chromadb.Client(Settings(
+       is_persistent=True,
+       persist_directory="/staging/chroma_data"
+   ))
+   
+   # Verify collections
+   collections = client.list_collections()
+   print(f"Found {len(collections)} collections")
+   
+   # Verify queries work
+   for collection in collections:
+       results = collection.get(limit=10)
+       print(f"{collection.name}: {len(results['ids'])} items")
+   ```
+
+3. **Performance testing**
+   ```python
+   import time
+   
+   # Benchmark queries
+   start = time.time()
+   results = collection.query(
+       query_embeddings=test_embeddings,
+       n_results=10
+   )
+   print(f"Query time: {time.time() - start:.3f}s")
+   ```
+
+### Production Migration
+
+1. **Schedule maintenance window**
+2. **Backup production data**
+   ```bash
+   cp -r /prod/chroma_data /backups/chroma_data_$(date +%Y%m%d_%H%M%S)
+   ```
+
+3. **Stop Chroma server**
+   ```bash
+   systemctl stop chroma
+   ```
+
+4. **Upgrade package**
+   ```bash
+   pip install --upgrade chromadb
+   ```
+
+5. **Apply migrations**
+   ```bash
+   python apply_migrations.py
+   ```
+
+6. **Verify migration**
+   ```bash
+   python verify_migration.py
+   ```
+
+7. **Start Chroma server**
+   ```bash
+   systemctl start chroma
+   ```
+
+8. **Monitor for issues**
+   ```bash
+   tail -f /var/log/chroma/chroma.log
+   ```
+
+### Rollback Plan
+
+Prepare rollback procedures:
+
+```bash
+#!/bin/bash
+# rollback.sh
+
+echo "Rolling back Chroma..."
+
+# Stop server
+systemctl stop chroma
+
+# Restore backup
+rm -rf /prod/chroma_data
+cp -r /backups/chroma_data_backup /prod/chroma_data
+
+# Downgrade package
+pip install chromadb==<previous-version>
+
+# Start server
+systemctl start chroma
+
+echo "Rollback complete"
+```
+
+## Best Practices
+
+1. **Always backup before upgrading** - No exceptions
+2. **Test in staging first** - Never upgrade production directly
+3. **Use `migrations="validate"` in CI/CD** - Catch migration issues early
+4. **Monitor migration logs** - Watch for warnings or errors
+5. **Keep migration history** - Maintain records of when migrations were applied
+6. **Use consistent hash algorithm** - Choose `sha256` for production, stick with it
+7. **Schedule maintenance windows** - Don't migrate during peak traffic
+8. **Verify after migration** - Test queries, check data integrity
+9. **Have rollback plan ready** - Document and test rollback procedures
+10. **Follow release notes** - Read migration notes for each version
+
+## Migration History
+
+Key migrations in Chroma history:
+
+### Version 0.4.0
+- Introduced new migration system
+- Added tenant and database support
+- Migrated from legacy DuckDB format
+
+### Version 0.5.0
+- Added collection dimension tracking
+- Improved segment management
+- Enhanced metadata indexing
+
+### Version 0.5.6
+- Automatic purging improvements
+- Storage optimization
+
+## Troubleshooting
+
+### Migration hangs or takes too long
+
+1. Check database size:
+   ```bash
+   du -sh ./chroma_data
+   ```
+
+2. Monitor migration progress:
+   ```bash
+   tail -f chroma.log | grep -i migration
+   ```
+
+3. For very large databases, consider:
+   - Increasing timeouts
+   - Running during off-peak hours
+   - Temporarily increasing resources
+
+### Database locked errors
+
+**Cause:** Another process has the database open
+
+**Solution:**
+1. Ensure Chroma is stopped
+2. Check for stale connections:
+   ```bash
+   lsof ./chroma_data/chroma.sqlite3
+   ```
+3. Kill any processes holding locks
+
+### Corruption after failed migration
+
+**Solution:**
+1. Restore from backup immediately
+2. Investigate failure cause
+3. Fix underlying issue
+4. Re-attempt migration
+
+## Next Steps
+
+- Configure [Observability](/operations/observability) to monitor migrations
+- Review [Configuration](/operations/configuration) options
+- Optimize [Performance](/operations/performance) after migrations

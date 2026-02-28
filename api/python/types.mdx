@@ -1,0 +1,726 @@
+---
+title: Type Definitions
+description: Type definitions and data structures for the Chroma Python API
+---
+
+Chroma provides comprehensive type definitions for type-safe interactions with the API.
+
+## Core Types
+
+### IDs
+
+Record identifiers.
+
+```python
+from chromadb.api.types import ID, IDs
+
+# Single ID
+id: ID = "doc-123"
+
+# Multiple IDs
+ids: IDs = ["doc-1", "doc-2", "doc-3"]
+```
+
+<ParamField path="ID" type="str">
+  A single record identifier.
+</ParamField>
+
+<ParamField path="IDs" type="List[str]">
+  A list of record identifiers.
+</ParamField>
+
+---
+
+### Documents
+
+Text documents.
+
+```python
+from chromadb.api.types import Document, Documents
+
+# Single document
+doc: Document = "This is a document"
+
+# Multiple documents
+docs: Documents = ["doc 1", "doc 2", "doc 3"]
+```
+
+<ParamField path="Document" type="str">
+  A single text document.
+</ParamField>
+
+<ParamField path="Documents" type="List[str]">
+  A list of text documents.
+</ParamField>
+
+---
+
+### Embeddings
+
+Vector embeddings.
+
+```python
+from chromadb.api.types import Embedding, Embeddings
+import numpy as np
+
+# Single embedding (as list)
+embedding: Embedding = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+
+# Multiple embeddings
+embeddings: Embeddings = [
+    np.array([0.1, 0.2, 0.3], dtype=np.float32),
+    np.array([0.4, 0.5, 0.6], dtype=np.float32)
+]
+```
+
+<ParamField path="Embedding" type="ndarray">
+  A single embedding vector as numpy array.
+</ParamField>
+
+<ParamField path="Embeddings" type="List[ndarray]">
+  A list of embedding vectors.
+</ParamField>
+
+<ParamField path="PyEmbedding" type="List[float]">
+  A single embedding as Python list (alternative format).
+</ParamField>
+
+<ParamField path="PyEmbeddings" type="List[List[float]]">
+  Multiple embeddings as nested Python lists.
+</ParamField>
+
+---
+
+### Metadata
+
+Record metadata.
+
+```python
+from chromadb.api.types import Metadata, Metadatas
+
+# Single metadata
+metadata: Metadata = {
+    "title": "Document Title",
+    "author": "John Doe",
+    "year": 2024,
+    "score": 0.95,
+    "published": True,
+    "tags": ["AI", "ML", "NLP"]
+}
+
+# Multiple metadatas
+metadatas: Metadatas = [
+    {"type": "article", "year": 2023},
+    {"type": "blog", "year": 2024}
+]
+```
+
+<ParamField path="Metadata" type="Dict[str, Union[str, int, float, bool, List, SparseVector]]">
+  Metadata dictionary. Values can be:
+  - Strings
+  - Numbers (int or float)
+  - Booleans
+  - Lists of strings, numbers, or booleans (homogeneous)
+  - SparseVector objects
+</ParamField>
+
+<ParamField path="Metadatas" type="List[Metadata]">
+  A list of metadata dictionaries.
+</ParamField>
+
+<ParamField path="UpdateMetadata" type="Dict[str, Union[str, int, float, bool, List, SparseVector, None]]">
+  Metadata for updates. Same as Metadata but allows None values to unset fields.
+</ParamField>
+
+---
+
+### SparseVector
+
+Sparse vector representation.
+
+```python
+from chromadb.api.types import SparseVector
+
+# Create sparse vector
+sparse_vec = SparseVector(
+    indices=[0, 5, 10],
+    values=[0.8, 0.6, 0.9]
+)
+
+# Use in metadata
+metadata = {
+    "sparse_embedding": sparse_vec
+}
+```
+
+<ParamField path="indices" type="List[int]">
+  Non-zero indices (must be sorted in ascending order).
+</ParamField>
+
+<ParamField path="values" type="List[float]">
+  Corresponding values (must be same length as indices).
+</ParamField>
+
+<Note>
+  Indices must be non-negative, sorted, and have the same length as values.
+</Note>
+
+---
+
+### URIs
+
+Uniform Resource Identifiers for external data.
+
+```python
+from chromadb.api.types import URI, URIs
+
+# Single URI
+uri: URI = "https://example.com/image.jpg"
+
+# Multiple URIs
+uris: URIs = [
+    "https://example.com/image1.jpg",
+    "https://example.com/image2.jpg"
+]
+```
+
+<ParamField path="URI" type="str">
+  A single URI string.
+</ParamField>
+
+<ParamField path="URIs" type="List[str]">
+  A list of URI strings.
+</ParamField>
+
+---
+
+## Query Filters
+
+### Where
+
+Metadata filter for querying.
+
+```python
+from chromadb.api.types import Where
+
+# Simple equality
+where: Where = {"author": "John Doe"}
+
+# Comparison operators
+where: Where = {"year": {"$gte": 2020}}
+
+# Logical operators
+where: Where = {
+    "$and": [
+        {"category": "science"},
+        {"year": {"$gte": 2020}}
+    ]
+}
+
+# Array membership
+where: Where = {"tags": {"$contains": "AI"}}
+```
+
+<ParamField path="Where" type="Dict">
+  Metadata filter using MongoDB-style query operators:
+  
+  **Comparison Operators:**
+  - `{"field": value}` - Equality (shorthand)
+  - `{"field": {"$eq": value}}` - Equality
+  - `{"field": {"$ne": value}}` - Not equal
+  - `{"field": {"$gt": value}}` - Greater than
+  - `{"field": {"$gte": value}}` - Greater than or equal
+  - `{"field": {"$lt": value}}` - Less than
+  - `{"field": {"$lte": value}}` - Less than or equal
+  
+  **Set Operators:**
+  - `{"field": {"$in": [values]}}` - In list
+  - `{"field": {"$nin": [values]}}` - Not in list
+  
+  **Array Operators:**
+  - `{"field": {"$contains": value}}` - Array contains value
+  - `{"field": {"$not_contains": value}}` - Array does not contain value
+  
+  **Logical Operators:**
+  - `{"$and": [conditions]}` - All conditions must match
+  - `{"$or": [conditions]}` - Any condition must match
+</ParamField>
+
+---
+
+### WhereDocument
+
+Document content filter for querying.
+
+```python
+from chromadb.api.types import WhereDocument
+
+# Substring match
+where_doc: WhereDocument = {"$contains": "machine learning"}
+
+# Regex match
+where_doc: WhereDocument = {"$regex": "^Chapter [0-9]+"}
+
+# Logical operators
+where_doc: WhereDocument = {
+    "$and": [
+        {"$contains": "AI"},
+        {"$not_contains": "deprecated"}
+    ]
+}
+```
+
+<ParamField path="WhereDocument" type="Dict">
+  Document content filter using operators:
+  
+  **String Operators:**
+  - `{"$contains": "text"}` - Document contains substring
+  - `{"$not_contains": "text"}` - Document does not contain substring
+  - `{"$regex": "pattern"}` - Document matches regex
+  - `{"$not_regex": "pattern"}` - Document does not match regex
+  
+  **Logical Operators:**
+  - `{"$and": [conditions]}` - All conditions must match
+  - `{"$or": [conditions]}` - Any condition must match
+</ParamField>
+
+---
+
+## Result Types
+
+### GetResult
+
+Result from `collection.get()` operations.
+
+```python
+from chromadb.api.types import GetResult
+
+results: GetResult = collection.get(
+    ids=["id1", "id2"],
+    include=["documents", "metadatas"]
+)
+
+# Access results
+for id, doc, meta in zip(results["ids"], results["documents"], results["metadatas"]):
+    print(f"ID: {id}")
+    print(f"Document: {doc}")
+    print(f"Metadata: {meta}")
+```
+
+<ResponseField name="ids" type="List[str]">
+  List of record IDs (always included).
+</ResponseField>
+
+<ResponseField name="documents" type="List[str]" optional>
+  List of documents (if included).
+</ResponseField>
+
+<ResponseField name="metadatas" type="List[Dict]" optional>
+  List of metadata dictionaries (if included).
+</ResponseField>
+
+<ResponseField name="embeddings" type="List[ndarray]" optional>
+  List of embeddings (if included).
+</ResponseField>
+
+<ResponseField name="uris" type="List[str]" optional>
+  List of URIs (if included).
+</ResponseField>
+
+<ResponseField name="included" type="List[str]">
+  List of fields that were included in the query.
+</ResponseField>
+
+---
+
+### QueryResult
+
+Result from `collection.query()` operations.
+
+```python
+from chromadb.api.types import QueryResult
+
+results: QueryResult = collection.query(
+    query_texts=["query1", "query2"],
+    n_results=5
+)
+
+# Access batched results
+for batch_ids, batch_docs, batch_distances in zip(
+    results["ids"],
+    results["documents"],
+    results["distances"]
+):
+    print(f"Batch results: {len(batch_ids)} records")
+    for id, doc, dist in zip(batch_ids, batch_docs, batch_distances):
+        print(f"  {id}: {doc} (distance: {dist})")
+```
+
+<ResponseField name="ids" type="List[List[str]]">
+  Nested list of IDs (one list per query).
+</ResponseField>
+
+<ResponseField name="documents" type="List[List[str]]" optional>
+  Nested list of documents (if included).
+</ResponseField>
+
+<ResponseField name="metadatas" type="List[List[Dict]]" optional>
+  Nested list of metadata dictionaries (if included).
+</ResponseField>
+
+<ResponseField name="embeddings" type="List[List[ndarray]]" optional>
+  Nested list of embeddings (if included).
+</ResponseField>
+
+<ResponseField name="distances" type="List[List[float]]" optional>
+  Nested list of distances (if included).
+</ResponseField>
+
+<ResponseField name="included" type="List[str]">
+  List of fields that were included in the query.
+</ResponseField>
+
+---
+
+### SearchResult
+
+Result from `collection.search()` operations (experimental).
+
+```python
+from chromadb.api.types import SearchResult
+from chromadb.execution.expression import Search, K, Knn
+
+results: SearchResult = collection.search(
+    Search().rank(Knn(query=[0.1, 0.2])).limit(10)
+)
+
+# Convert to row format
+for payload_rows in results.rows():
+    for row in payload_rows:
+        print(f"ID: {row['id']}")
+        if 'document' in row:
+            print(f"Document: {row['document']}")
+        if 'score' in row:
+            print(f"Score: {row['score']}")
+```
+
+<ResponseField name="ids" type="List[List[str]]">
+  Nested list of IDs (one list per search).
+</ResponseField>
+
+<ResponseField name="documents" type="List[List[str]]" optional>
+  Nested list of documents (if selected).
+</ResponseField>
+
+<ResponseField name="embeddings" type="List[List[List[float]]]" optional>
+  Nested list of embeddings (if selected).
+</ResponseField>
+
+<ResponseField name="metadatas" type="List[List[Dict]]" optional>
+  Nested list of metadata dictionaries (if selected).
+</ResponseField>
+
+<ResponseField name="scores" type="List[List[float]]" optional>
+  Nested list of ranking scores (if scoring is used).
+</ResponseField>
+
+<ResponseField name="select" type="List[List[str]]">
+  List of selected keys for each payload.
+</ResponseField>
+
+**Methods:**
+
+- `rows()`: Convert column-major format to row-major format, returning `List[List[SearchResultRow]]`
+
+---
+
+### IndexingStatus
+
+Indexing progress information.
+
+```python
+from chromadb.api.types import IndexingStatus
+
+status: IndexingStatus = collection.get_indexing_status()
+
+print(f"Indexed: {status.num_indexed_ops}")
+print(f"Unindexed: {status.num_unindexed_ops}")
+print(f"Total: {status.total_ops}")
+print(f"Progress: {status.op_indexing_progress:.2%}")
+```
+
+<ResponseField name="num_indexed_ops" type="int">
+  Number of user operations that have been indexed.
+</ResponseField>
+
+<ResponseField name="num_unindexed_ops" type="int">
+  Number of user operations pending indexing.
+</ResponseField>
+
+<ResponseField name="total_ops" type="int">
+  Total number of user operations in the collection.
+</ResponseField>
+
+<ResponseField name="op_indexing_progress" type="float">
+  Proportion of operations indexed (value between 0.0 and 1.0).
+</ResponseField>
+
+---
+
+## Schema Configuration Types
+
+### Schema
+
+Collection schema for indexing and encryption configuration.
+
+```python
+from chromadb import Schema, VectorIndexConfig, HnswIndexConfig, FtsIndexConfig
+
+schema = Schema()
+
+# Configure vector index
+schema.create_index(
+    config=VectorIndexConfig(
+        space="cosine",
+        hnsw=HnswIndexConfig(ef_construction=200)
+    )
+)
+
+# Enable full-text search on documents
+schema.create_index(
+    config=FtsIndexConfig(),
+    key="#document"
+)
+
+collection = client.create_collection(
+    name="my_collection",
+    schema=schema
+)
+```
+
+---
+
+### VectorIndexConfig
+
+Configuration for dense vector indexes.
+
+```python
+from chromadb import VectorIndexConfig, HnswIndexConfig
+
+config = VectorIndexConfig(
+    space="cosine",
+    embedding_function=my_embedding_function,
+    hnsw=HnswIndexConfig(
+        ef_construction=200,
+        max_neighbors=16
+    )
+)
+```
+
+<ParamField path="space" type="'cosine' | 'l2' | 'ip'" optional>
+  Distance metric: `"cosine"`, `"l2"` (Euclidean), or `"ip"` (inner product).
+</ParamField>
+
+<ParamField path="embedding_function" type="EmbeddingFunction" optional>
+  Embedding function for the index.
+</ParamField>
+
+<ParamField path="source_key" type="str" optional>
+  Source key to extract vectors from. Defaults to `"#document"` for the default embedding.
+</ParamField>
+
+<ParamField path="hnsw" type="HnswIndexConfig" optional>
+  HNSW algorithm configuration.
+</ParamField>
+
+<ParamField path="spann" type="SpannIndexConfig" optional>
+  SPANN algorithm configuration.
+</ParamField>
+
+---
+
+### HnswIndexConfig
+
+Hierarchical Navigable Small World (HNSW) algorithm configuration.
+
+```python
+from chromadb import HnswIndexConfig
+
+hnsw = HnswIndexConfig(
+    ef_construction=200,
+    max_neighbors=16,
+    ef_search=100
+)
+```
+
+<ParamField path="ef_construction" type="int" optional>
+  Size of candidate list during index construction. Higher values improve quality but increase build time.
+</ParamField>
+
+<ParamField path="max_neighbors" type="int" optional>
+  Maximum number of neighbors per node (M parameter). Higher values improve recall but increase memory usage.
+</ParamField>
+
+<ParamField path="ef_search" type="int" optional>
+  Size of candidate list during search. Higher values improve recall but increase query time.
+</ParamField>
+
+<ParamField path="num_threads" type="int" optional>
+  Number of threads for index construction.
+</ParamField>
+
+<ParamField path="batch_size" type="int" optional>
+  Batch size for index operations.
+</ParamField>
+
+<ParamField path="sync_threshold" type="int" optional>
+  Threshold for syncing index to disk.
+</ParamField>
+
+<ParamField path="resize_factor" type="float" optional>
+  Factor for resizing the index.
+</ParamField>
+
+---
+
+### FtsIndexConfig
+
+Full-text search index configuration.
+
+```python
+from chromadb import FtsIndexConfig
+
+fts = FtsIndexConfig()
+```
+
+<Note>
+  FtsIndexConfig has no configurable parameters. Use it to enable full-text search on document fields.
+</Note>
+
+---
+
+### SparseVectorIndexConfig
+
+Sparse vector index configuration.
+
+```python
+from chromadb import SparseVectorIndexConfig
+
+sparse_config = SparseVectorIndexConfig(
+    embedding_function=my_sparse_embedding_function,
+    source_key="#document",
+    bm25=True
+)
+```
+
+<ParamField path="embedding_function" type="SparseEmbeddingFunction" optional>
+  Sparse embedding function for the index.
+</ParamField>
+
+<ParamField path="source_key" type="str" optional>
+  Source key to extract sparse vectors from.
+</ParamField>
+
+<ParamField path="bm25" type="bool" optional>
+  Enable BM25 weighting for sparse vectors.
+</ParamField>
+
+---
+
+### Inverted Index Configs
+
+Configuration for inverted indexes on metadata fields.
+
+```python
+from chromadb import (
+    StringInvertedIndexConfig,
+    IntInvertedIndexConfig,
+    FloatInvertedIndexConfig,
+    BoolInvertedIndexConfig
+)
+
+# All have no configurable parameters
+string_idx = StringInvertedIndexConfig()
+int_idx = IntInvertedIndexConfig()
+float_idx = FloatInvertedIndexConfig()
+bool_idx = BoolInvertedIndexConfig()
+```
+
+<Note>
+  These indexes are automatically enabled on metadata fields by default. No configuration required.
+</Note>
+
+---
+
+## Embedding Functions
+
+### EmbeddingFunction
+
+Protocol for implementing custom embedding functions.
+
+```python
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
+import numpy as np
+
+class MyEmbeddingFunction(EmbeddingFunction[Documents]):
+    def __call__(self, input: Documents) -> Embeddings:
+        # Convert documents to embeddings
+        embeddings = []
+        for doc in input:
+            # Your embedding logic here
+            embedding = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+            embeddings.append(embedding)
+        return embeddings
+    
+    @staticmethod
+    def name() -> str:
+        return "my_embedding_function"
+    
+    @staticmethod
+    def build_from_config(config: dict) -> "MyEmbeddingFunction":
+        return MyEmbeddingFunction()
+    
+    def get_config(self) -> dict:
+        return {}
+```
+
+---
+
+## Encryption
+
+### Cmek
+
+Customer-managed encryption key for collection data.
+
+```python
+from chromadb import Cmek, Schema
+
+# Create CMEK for GCP
+cmek = Cmek.gcp(
+    "projects/my-project/locations/us-central1/"
+    "keyRings/my-ring/cryptoKeys/my-key"
+)
+
+# Use in schema
+schema = Schema().set_cmek(cmek)
+
+collection = client.create_collection(
+    name="encrypted_collection",
+    schema=schema
+)
+```
+
+<ParamField path="provider" type="CmekProvider">
+  Cloud provider (currently only `CmekProvider.GCP` supported).
+</ParamField>
+
+<ParamField path="resource" type="str">
+  Provider-specific resource identifier for the encryption key.
+</ParamField>
+
+**Methods:**
+
+- `gcp(resource: str)`: Create a CMEK for Google Cloud Platform
+- `validate_pattern()`: Validate the resource name format
+- `to_dict()`: Serialize to dictionary
+- `from_dict(data: dict)`: Deserialize from dictionary

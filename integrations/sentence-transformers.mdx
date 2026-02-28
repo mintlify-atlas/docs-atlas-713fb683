@@ -1,0 +1,260 @@
+---
+title: Sentence Transformers
+description: Chroma's default embedding function powered by Sentence Transformers
+---
+
+Chroma uses Sentence Transformers as its default embedding function, providing high-quality embeddings out of the box with no additional configuration.
+
+## Default model
+
+Chroma uses the **all-MiniLM-L6-v2** model by default:
+
+- **Dimensions**: 384
+- **Speed**: Very fast
+- **Quality**: Excellent for most use cases
+- **Size**: ~80MB
+- **Language**: English (trained on English data)
+
+```python
+import chromadb
+
+# Uses default Sentence Transformer automatically
+client = chromadb.Client()
+collection = client.create_collection(name="my_collection")
+
+# No need to specify embedding function
+collection.add(
+    documents=["This is a document", "This is another document"],
+    ids=["doc1", "doc2"]
+)
+```
+
+## How it works
+
+When you create a collection without specifying an embedding function:
+
+<Steps>
+  <Step title="Model download">
+    On first use, Chroma downloads the all-MiniLM-L6-v2 model (~80MB) from Hugging Face
+  </Step>
+  
+  <Step title="Local inference">
+    The model runs locally on your machine using ONNX Runtime for optimal performance
+  </Step>
+  
+  <Step title="Automatic embedding">
+    When you add documents, Chroma automatically generates embeddings using the model
+  </Step>
+  
+  <Step title="Caching">
+    The model is cached locally, so subsequent uses are instant
+  </Step>
+</Steps>
+
+## Explicit usage
+
+```python
+from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+
+# Explicitly use the default function
+embedding_function = DefaultEmbeddingFunction()
+
+collection = client.create_collection(
+    name="my_collection",
+    embedding_function=embedding_function
+)
+```
+
+## ONNX Runtime
+
+Chroma uses ONNX Runtime for fast, efficient inference:
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+
+# This is what Chroma uses internally
+embedding_function = ONNXMiniLM_L6_V2()
+
+collection = client.create_collection(
+    name="my_collection",
+    embedding_function=embedding_function
+)
+```
+
+### Benefits of ONNX
+
+<CardGroup cols={2}>
+  <Card title="Fast inference" icon="bolt">
+    Optimized for CPU inference without requiring heavy ML frameworks
+  </Card>
+  <Card title="Small footprint" icon="feather">
+    Minimal dependencies compared to full PyTorch or TensorFlow
+  </Card>
+  <Card title="Cross-platform" icon="laptop">
+    Works consistently across Windows, macOS, and Linux
+  </Card>
+  <Card title="No GPU required" icon="microchip">
+    Efficient CPU inference, no need for GPU
+  </Card>
+</CardGroup>
+
+## Model characteristics
+
+### Performance
+
+```python
+# Embedding speed (approximate on CPU)
+# Single document: ~10ms
+# Batch of 100: ~200ms
+# Batch of 1000: ~1.5s
+
+import time
+import chromadb
+
+client = chromadb.Client()
+collection = client.create_collection("benchmark")
+
+# Benchmark
+start = time.time()
+collection.add(
+    documents=[f"Document {i}" for i in range(100)],
+    ids=[f"id{i}" for i in range(100)]
+)
+end = time.time()
+print(f"Time for 100 documents: {end - start:.2f}s")
+```
+
+### Quality metrics
+
+The all-MiniLM-L6-v2 model achieves:
+
+- **Semantic Textual Similarity**: 82.41% correlation
+- **Semantic Search**: 58.04 mean average precision
+- **Paraphrase Mining**: 70.93 F1 score
+
+## Customization
+
+While Sentence Transformers is the default, you can easily switch to other embedding functions:
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```python
+    from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+    
+    embedding_function = OpenAIEmbeddingFunction(
+        api_key="your-key",
+        model_name="text-embedding-3-small"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Cohere">
+    ```python
+    from chromadb.utils.embedding_functions import CohereEmbeddingFunction
+    
+    embedding_function = CohereEmbeddingFunction(
+        api_key="your-key",
+        model_name="embed-english-v3.0"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Custom Sentence Transformer">
+    ```python
+    from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+    
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name="all-mpnet-base-v2"  # Different model
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Model caching
+
+### Cache location
+
+```python
+import os
+
+# Default cache location
+default_cache = os.path.expanduser("~/.cache/chroma/onnx_models")
+
+# Custom cache location
+os.environ["CHROMA_CACHE_DIR"] = "/custom/cache/path"
+```
+
+### Pre-downloading
+
+```python
+import chromadb
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+
+# This will download the model if not cached
+embedding_function = ONNXMiniLM_L6_V2()
+
+# Now subsequent uses will be instant
+client = chromadb.Client()
+collection = client.create_collection(
+    name="my_collection",
+    embedding_function=embedding_function
+)
+```
+
+## When to use
+
+<AccordionGroup>
+  <Accordion title="✅ Good for">
+    - **Prototyping**: Get started quickly with no API keys
+    - **English content**: Trained on English data
+    - **Privacy**: All processing happens locally
+    - **Cost-sensitive**: No API costs
+    - **Offline use**: Works without internet (after initial download)
+  </Accordion>
+  
+  <Accordion title="⚠️ Consider alternatives if">
+    - You need **multilingual** support → Use Cohere or multilingual Sentence Transformers
+    - You need **highest quality** → Use OpenAI text-embedding-3-large
+    - You're processing **very large volumes** → Consider hosted embedding APIs
+    - You need **domain-specific** embeddings → Fine-tune or use specialized models
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<Accordion title="Model download fails">
+  ```python
+  # Manually download model
+  from sentence_transformers import SentenceTransformer
+  
+  model = SentenceTransformer('all-MiniLM-L6-v2')
+  # Model is now cached for Chroma to use
+  ```
+</Accordion>
+
+<Accordion title="Slow first run">
+  The first embedding operation downloads the model (~80MB). Subsequent operations are fast. Consider pre-downloading in your deployment process.
+</Accordion>
+
+<Accordion title="Out of memory errors">
+  Process documents in smaller batches:
+  ```python
+  batch_size = 50  # Reduce if needed
+  for i in range(0, len(documents), batch_size):
+      collection.add(
+          documents=documents[i:i+batch_size],
+          ids=ids[i:i+batch_size]
+      )
+  ```
+</Accordion>
+
+## Resources
+
+- [all-MiniLM-L6-v2 Model Card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
+- [Sentence Transformers Documentation](https://www.sbert.net/)
+- [ONNX Runtime](https://onnxruntime.ai/)
+
+<Note>
+The default Sentence Transformer model provides excellent performance for most use cases. You only need to switch to a different embedding function if you have specific requirements like multilingual support or domain-specific embeddings.
+</Note>

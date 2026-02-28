@@ -1,0 +1,476 @@
+---
+title: Installation
+description: Install Chroma for Python, JavaScript, Go, or Docker
+---
+
+Chroma is available as a package for Python, JavaScript, and Go. You can also run it in Docker or build from source.
+
+## Python
+
+### Requirements
+
+- Python 3.9 or higher
+- SQLite 3.35.0 or higher (automatically handled on most systems)
+
+### Install via pip
+
+<CodeGroup>
+```bash pip
+pip install chromadb
+```
+
+```bash pip (with extras)
+# Install with additional dependencies for development
+pip install chromadb[dev]
+```
+</CodeGroup>
+
+### Verify Installation
+
+```python
+import chromadb
+print(chromadb.__version__)  # Should print: 1.5.2
+
+client = chromadb.Client()
+print("Chroma is working!")
+```
+
+<Note>
+**SQLite Version Issue**: Chroma requires SQLite 3.35.0 or higher. If you encounter an error about SQLite version:
+
+- **Google Colab**: Automatically handled with `pysqlite3-binary`
+- **Other systems**: Visit [Troubleshooting SQLite](https://docs.trychroma.com/troubleshooting#sqlite) for upgrade instructions
+</Note>
+
+### Python Client Types
+
+Chroma provides several client types for different use cases:
+
+<Tabs>
+  <Tab title="EphemeralClient">
+    In-memory client that doesn't persist data. Perfect for testing.
+
+    ```python
+    import chromadb
+    
+    client = chromadb.EphemeralClient()
+    # or simply
+    client = chromadb.Client()
+    ```
+  </Tab>
+  
+  <Tab title="PersistentClient">
+    Stores data on disk for local development.
+
+    ```python
+    import chromadb
+    
+    client = chromadb.PersistentClient(path="./chroma_data")
+    ```
+  </Tab>
+  
+  <Tab title="HttpClient">
+    Connect to a remote Chroma server.
+
+    ```python
+    import chromadb
+    
+    client = chromadb.HttpClient(
+        host="localhost",
+        port=8000,
+        ssl=False,
+        headers={"Authorization": "Bearer token"}  # optional
+    )
+    ```
+  </Tab>
+  
+  <Tab title="CloudClient">
+    Connect to Chroma Cloud (production-ready hosted service).
+
+    ```python
+    import chromadb
+    
+    # API key can also be set via CHROMA_API_KEY environment variable
+    client = chromadb.CloudClient(
+        tenant="my-tenant",      # or set CHROMA_TENANT
+        database="my-database",  # or set CHROMA_DATABASE
+        api_key="your-api-key"  # or set CHROMA_API_KEY
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## JavaScript
+
+### Requirements
+
+- Node.js 20 or higher
+
+### Install via npm
+
+<CodeGroup>
+```bash npm
+npm install chromadb
+```
+
+```bash yarn
+yarn add chromadb
+```
+
+```bash pnpm
+pnpm add chromadb
+```
+</CodeGroup>
+
+### Verify Installation
+
+```javascript
+import { ChromaClient } from 'chromadb';
+
+const client = new ChromaClient();
+console.log('Chroma is working!');
+```
+
+<Note>
+The JavaScript client (version 3.3.1) includes optional native bindings for better performance on supported platforms:
+- macOS (ARM64 and x64)
+- Linux (ARM64 and x64)
+- Windows (x64 and ARM64)
+</Note>
+
+### JavaScript Client Types
+
+<Tabs>
+  <Tab title="In-Memory">
+    In-memory client for testing and development.
+
+    ```javascript
+    import { ChromaClient } from 'chromadb';
+    
+    const client = new ChromaClient();
+    ```
+  </Tab>
+  
+  <Tab title="HTTP Client">
+    Connect to a remote Chroma server.
+
+    ```javascript
+    import { ChromaClient } from 'chromadb';
+    
+    const client = new ChromaClient({
+      path: "http://localhost:8000"
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Go
+
+### Requirements
+
+- Go 1.23.0 or higher
+
+### Install via go get
+
+```bash
+go get github.com/chroma-core/chroma/go
+```
+
+### Usage
+
+```go
+import "github.com/chroma-core/chroma/go"
+
+// Your Go code here
+```
+
+<Note>
+The Go client is part of the Chroma server implementation. For client-side usage, consider using the HTTP API with a Go HTTP client.
+</Note>
+
+## Docker
+
+### Using Pre-built Image
+
+The easiest way to run Chroma server is using the official Docker image:
+
+<Steps>
+  <Step title="Pull the Image">
+    ```bash
+    docker pull ghcr.io/chroma-core/chroma:latest
+    ```
+  </Step>
+
+  <Step title="Run the Container">
+    ```bash
+    docker run -p 8000:8000 ghcr.io/chroma-core/chroma:latest
+    ```
+  </Step>
+
+  <Step title="Verify It's Running">
+    ```bash
+    curl http://localhost:8000/api/v2/heartbeat
+    ```
+  </Step>
+</Steps>
+
+### Using Docker Compose
+
+For persistent storage, use Docker Compose:
+
+<CodeGroup>
+```yaml Simple
+version: '3.9'
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      - chroma-data:/chroma/chroma/
+    ports:
+      - 8000:8000
+    networks:
+      - net
+
+volumes:
+  chroma-data:
+    driver: local
+```
+
+```yaml With Health Check
+version: '3.9'
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  server:
+    image: ghcr.io/chroma-core/chroma:latest
+    volumes:
+      - chroma-data:/data
+    environment:
+      - CHROMA_OPEN_TELEMETRY__ENDPOINT=${CHROMA_OPEN_TELEMETRY__ENDPOINT}
+      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=${CHROMA_OPEN_TELEMETRY__SERVICE_NAME}
+      - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS}
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - net
+
+volumes:
+  chroma-data:
+    driver: local
+```
+</CodeGroup>
+
+Save as `docker-compose.yml` and run:
+
+```bash
+docker-compose up -d
+```
+
+### Docker Configuration
+
+Common environment variables:
+
+- `IS_PERSISTENT=TRUE` - Enable persistent storage
+- `CHROMA_OPEN_TELEMETRY__ENDPOINT` - OpenTelemetry endpoint for observability
+- `CHROMA_OPEN_TELEMETRY__SERVICE_NAME` - Service name for telemetry
+- `OTEL_EXPORTER_OTLP_HEADERS` - OTLP headers for authentication
+
+## Install from Source
+
+For development or to build from source:
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone https://github.com/chroma-core/chroma.git
+    cd chroma
+    ```
+  </Step>
+
+  <Step title="Set Up Python Environment">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    ```bash
+    pip install -r requirements.txt
+    pip install -r requirements_dev.txt
+    ```
+  </Step>
+
+  <Step title="Install Pre-commit Hooks">
+    ```bash
+    pre-commit install
+    ```
+  </Step>
+
+  <Step title="Install in Editable Mode">
+    ```bash
+    pip install -e .
+    ```
+  </Step>
+
+  <Step title="Build Rust Bindings (Optional)">
+    For development with Rust components:
+
+    ```bash
+    # Install maturin
+    pip install maturin
+    
+    # Build Rust bindings
+    maturin dev
+    ```
+  </Step>
+</Steps>
+
+### Development Setup
+
+For distributed Chroma development with Kubernetes:
+
+<Note>
+**Requirements**:
+- Docker
+- Local Kubernetes cluster ([OrbStack](https://orbstack.dev/) for macOS, [Kind](https://kind.sigs.k8s.io/) for Linux)
+- [Tilt](https://docs.tilt.dev/)
+- [Helm](https://helm.sh/)
+</Note>
+
+```bash
+# Start Kubernetes cluster (if using OrbStack, enable it in the UI)
+
+# Start distributed Chroma
+tilt up
+
+# Access at http://localhost:8000
+# View Tilt dashboard at http://localhost:10350
+
+# Clean up
+tilt down
+```
+
+## Run the Server
+
+Once installed, you can run the Chroma server:
+
+<CodeGroup>
+```bash Python CLI
+chroma run --path /chroma_db_path
+```
+
+```bash Docker
+docker run -p 8000:8000 -v chroma-data:/data ghcr.io/chroma-core/chroma:latest
+```
+
+```bash JavaScript CLI
+npx chroma run
+```
+</CodeGroup>
+
+The server will start on `http://localhost:8000` by default.
+
+## Verify Installation
+
+Test your installation by connecting to the server:
+
+<CodeGroup>
+```python Python
+import chromadb
+
+client = chromadb.HttpClient(host="localhost", port=8000)
+print(client.heartbeat())  # Should return a timestamp
+```
+
+```javascript JavaScript
+import { ChromaClient } from 'chromadb';
+
+const client = new ChromaClient({
+  path: "http://localhost:8000"
+});
+
+const heartbeat = await client.heartbeat();
+console.log(heartbeat);  // Should return a timestamp
+```
+
+```bash cURL
+curl http://localhost:8000/api/v2/heartbeat
+```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="SQLite version error (Python)">
+    If you see an error about SQLite version being too old:
+
+    ```bash
+    # Install pysqlite3-binary
+    pip install pysqlite3-binary
+    ```
+
+    For more details, see [Troubleshooting SQLite](https://docs.trychroma.com/troubleshooting#sqlite).
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    If port 8000 is already in use:
+
+    ```bash
+    # Use a different port
+    chroma run --port 8001
+    
+    # Or in Docker
+    docker run -p 8001:8000 ghcr.io/chroma-core/chroma:latest
+    ```
+  </Accordion>
+
+  <Accordion title="Connection refused">
+    Make sure the Chroma server is running and accessible:
+
+    ```bash
+    # Check if server is running
+    curl http://localhost:8000/api/v2/heartbeat
+    
+    # Check Docker container logs
+    docker logs <container-id>
+    ```
+  </Accordion>
+
+  <Accordion title="Native bindings not found (JavaScript)">
+    The JavaScript client includes optional native bindings for better performance. If they fail to load, the client will fall back to a pure JavaScript implementation. This is normal and doesn't affect functionality.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running with your first collection
+  </Card>
+  <Card title="Configuration" icon="gear" href="/operations/configuration">
+    Configure Chroma for your use case
+  </Card>
+  <Card title="Deployment" icon="server" href="/deployment/overview">
+    Deploy Chroma to production
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/python/client">
+    Explore the full API documentation
+  </Card>
+</CardGroup>

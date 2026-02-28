@@ -1,0 +1,489 @@
+---
+title: Observability
+description: Monitor Chroma with OpenTelemetry, metrics, and logging
+---
+
+## Overview
+
+Chroma provides comprehensive observability through OpenTelemetry integration for distributed tracing, structured logging, and metrics collection. This enables you to monitor performance, debug issues, and understand system behavior in production.
+
+## OpenTelemetry Integration
+
+Chroma supports OpenTelemetry (OTel) for distributed tracing and observability. OpenTelemetry is a vendor-neutral standard for collecting telemetry data from your applications.
+
+### Configuration
+
+Configure OpenTelemetry using environment variables or the Settings class:
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_otel_collection_endpoint="http://otel-collector:4317",
+    chroma_otel_service_name="my-chroma-service",
+    chroma_otel_collection_headers={
+        "x-honeycomb-team": "YOUR_API_KEY"
+    },
+    chroma_otel_granularity="operation"
+))
+```
+
+Or using environment variables:
+
+```bash
+export CHROMA_OTEL_COLLECTION_ENDPOINT="http://otel-collector:4317"
+export CHROMA_OTEL_SERVICE_NAME="my-chroma-service"
+export CHROMA_OTEL_GRANULARITY="operation"
+```
+
+### OpenTelemetry Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `chroma_otel_collection_endpoint` | `str` | `""` | OTLP endpoint (e.g., `http://localhost:4317`) |
+| `chroma_otel_service_name` | `str` | `"chromadb"` | Service name for span tagging and aggregation |
+| `chroma_otel_collection_headers` | `Dict[str, str]` | `{}` | Headers to send with spans (e.g., API keys) |
+| `chroma_otel_granularity` | `str` | `None` | Tracing granularity level |
+
+### Granularity Levels
+
+Control the level of detail in traces with the `chroma_otel_granularity` setting:
+
+- **`none`** (default) - No spans emitted, OpenTelemetry disabled
+- **`operation`** - Spans for high-level operations (add, query, get, etc.)
+- **`operation_and_segment`** - Operations plus segment-level operations
+- **`all`** - Detailed spans for almost every method call (use for debugging only)
+
+```python
+from chromadb.telemetry.opentelemetry import OpenTelemetryGranularity
+
+# Recommended for production
+settings = Settings(chroma_otel_granularity="operation")
+
+# For debugging performance issues
+settings = Settings(chroma_otel_granularity="all")
+```
+
+### Custom Tracing
+
+You can add custom spans and attributes to the current trace:
+
+```python
+from chromadb.telemetry.opentelemetry import add_attributes_to_current_span
+
+# Add custom attributes to current span
+add_attributes_to_current_span({
+    "user_id": "user123",
+    "collection_name": "my_collection",
+    "batch_size": 100
+})
+```
+
+### Decorating Methods with Tracing
+
+Add tracing to your own methods:
+
+```python
+from chromadb.telemetry.opentelemetry import (
+    trace_method,
+    OpenTelemetryGranularity
+)
+
+class MyService:
+    @trace_method(
+        "MyService.process_embeddings",
+        OpenTelemetryGranularity.OPERATION,
+        attributes={"service": "embedding_processor"}
+    )
+    def process_embeddings(self, documents):
+        # Your code here
+        pass
+    
+    @trace_method(
+        "MyService.async_operation",
+        OpenTelemetryGranularity.OPERATION
+    )
+    async def async_operation(self):
+        # Works with async methods too
+        pass
+```
+
+The decorator automatically handles both sync and async methods and adds the pod name attribute.
+
+## Local Observability Stack
+
+Chroma provides a complete local observability stack with OpenTelemetry Collector and Zipkin for development and testing.
+
+### Running the Stack
+
+From the Chroma repository root:
+
+```bash
+docker compose -f examples/observability/docker-compose.local-observability.yml up --build -d
+```
+
+This starts:
+- **Chroma server** with OpenTelemetry enabled
+- **OpenTelemetry Collector** - Receives and processes traces
+- **Zipkin** - Trace visualization UI
+
+### Accessing Zipkin UI
+
+Open your browser to `http://localhost:9411` to view traces in the Zipkin UI.
+
+### OpenTelemetry Collector Configuration
+
+The collector configuration (`otel-collector-config.yaml`):
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  logging:
+  zipkin:
+    endpoint: "http://zipkin:9411/api/v2/spans"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [zipkin]
+```
+
+## Logging Configuration
+
+Chroma uses Python's standard logging with customizable configuration via YAML.
+
+### Default Logging Configuration
+
+Chroma's default logging configuration (`log_config.yml`):
+
+```yaml
+version: 1
+disable_existing_loggers: False
+
+formatters:
+  default:
+    "()": uvicorn.logging.DefaultFormatter
+    format: '%(levelprefix)s [%(asctime)s] %(message)s'
+    use_colors: null
+    datefmt: '%d-%m-%Y %H:%M:%S'
+  access:
+    "()": uvicorn.logging.AccessFormatter
+    format: '%(levelprefix)s [%(asctime)s] %(client_addr)s - "%(request_line)s" %(status_code)s'
+    datefmt: '%d-%m-%Y %H:%M:%S'
+
+handlers:
+  default:
+    formatter: default
+    class: logging.StreamHandler
+    stream: ext://sys.stderr
+  access:
+    formatter: access
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+  console:
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+    formatter: default
+  file:
+    class: logging.handlers.RotatingFileHandler
+    filename: chroma.log
+    formatter: default
+
+loggers:
+  root:
+    level: WARN
+    handlers: [console, file]
+  chromadb:
+    level: DEBUG
+  uvicorn:
+    level: INFO
+```
+
+### Custom Logging Configuration
+
+Create your own `log_config.yml`:
+
+```yaml
+version: 1
+disable_existing_loggers: False
+
+formatters:
+  json:
+    class: pythonjsonlogger.jsonlogger.JsonFormatter
+    format: '%(asctime)s %(name)s %(levelname)s %(message)s'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: json
+    stream: ext://sys.stdout
+  
+  file:
+    class: logging.handlers.RotatingFileHandler
+    filename: /var/log/chroma/chroma.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    formatter: json
+
+loggers:
+  root:
+    level: INFO
+    handlers: [console, file]
+  chromadb:
+    level: INFO
+  chromadb.telemetry:
+    level: DEBUG
+  uvicorn:
+    level: WARNING
+  uvicorn.access:
+    level: INFO
+    handlers: [access]
+    propagate: false
+```
+
+Load your custom configuration:
+
+```python
+import logging.config
+import yaml
+
+with open("log_config.yml") as f:
+    config = yaml.safe_load(f)
+    logging.config.dictConfig(config)
+```
+
+### Log Levels
+
+Configure log levels per logger:
+
+```python
+import logging
+
+# Set global Chroma log level
+logging.getLogger("chromadb").setLevel(logging.INFO)
+
+# Fine-tune specific components
+logging.getLogger("chromadb.api").setLevel(logging.DEBUG)
+logging.getLogger("chromadb.db").setLevel(logging.WARNING)
+logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
+```
+
+Or via environment variables:
+
+```bash
+export CHROMA_LOG_LEVEL=INFO
+```
+
+## Metrics Collection
+
+Chroma emits metrics through OpenTelemetry that can be collected by your observability platform.
+
+### Key Metrics
+
+#### Operation Metrics
+- **Operation duration** - Time taken for add, query, get, update, delete operations
+- **Operation count** - Number of operations executed
+- **Batch size** - Size of batches in batch operations
+
+#### System Metrics
+- **Memory usage** - Memory consumption of segments and indices
+- **Cache hit rate** - LRU cache effectiveness
+- **Database connections** - Active database connection count
+
+#### Query Metrics
+- **Query latency** - Time to execute queries
+- **Results returned** - Number of results per query
+- **Index operations** - HNSW/SPANN index operation counts
+
+### Exporting to Prometheus
+
+Configure the OpenTelemetry Collector to export metrics to Prometheus:
+
+```yaml
+# otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [logging]
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus]
+```
+
+## Integration Examples
+
+### Honeycomb
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_otel_collection_endpoint="https://api.honeycomb.io:443",
+    chroma_otel_service_name="chroma-production",
+    chroma_otel_collection_headers={
+        "x-honeycomb-team": "YOUR_API_KEY",
+        "x-honeycomb-dataset": "chroma"
+    },
+    chroma_otel_granularity="operation"
+))
+```
+
+### Datadog
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_otel_collection_endpoint="http://localhost:4317",
+    chroma_otel_service_name="chroma-production",
+    chroma_otel_collection_headers={
+        "dd-api-key": "YOUR_API_KEY"
+    },
+    chroma_otel_granularity="operation"
+))
+```
+
+Configure the Datadog Agent to receive OTLP:
+
+```yaml
+# datadog.yaml
+otlp_config:
+  receiver:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+```
+
+### New Relic
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_otel_collection_endpoint="https://otlp.nr-data.net:4317",
+    chroma_otel_service_name="chroma-production",
+    chroma_otel_collection_headers={
+        "api-key": "YOUR_LICENSE_KEY"
+    },
+    chroma_otel_granularity="operation"
+))
+```
+
+### Jaeger
+
+```bash
+# Run Jaeger all-in-one
+docker run -d --name jaeger \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  -p 16686:16686 \
+  jaegertracing/all-in-one:latest
+```
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    chroma_otel_collection_endpoint="http://localhost:4317",
+    chroma_otel_service_name="chroma-dev",
+    chroma_otel_granularity="operation"
+))
+```
+
+View traces at `http://localhost:16686`
+
+## Product Telemetry
+
+Chroma collects anonymous usage telemetry to improve the product.
+
+### Disabling Telemetry
+
+```python
+from chromadb.config import Settings
+import chromadb
+
+client = chromadb.Client(Settings(
+    anonymized_telemetry=False
+))
+```
+
+Or via environment variable:
+
+```bash
+export ANONYMIZED_TELEMETRY=False
+```
+
+### Custom Telemetry Implementation
+
+```python
+from chromadb.config import Settings
+
+settings = Settings(
+    chroma_product_telemetry_impl="my_package.MyTelemetryClient"
+)
+```
+
+## Best Practices
+
+1. **Use appropriate granularity** - Set to `"operation"` for production, `"all"` only when debugging
+2. **Add custom attributes** - Include relevant context like user IDs, collection names, batch sizes
+3. **Monitor query latency** - Track p50, p95, p99 query latencies
+4. **Set up alerts** - Alert on high error rates, slow queries, memory pressure
+5. **Rotate log files** - Use `RotatingFileHandler` to prevent disk space issues
+6. **Sample traces in high-volume** - Configure sampling in the OTel collector for high-traffic deployments
+7. **Secure telemetry endpoints** - Use TLS and authentication for production telemetry
+8. **Monitor resource usage** - Track memory, CPU, and disk usage alongside application metrics
+
+## Troubleshooting
+
+### No traces appearing
+
+1. Verify `chroma_otel_granularity` is not `"none"`
+2. Check the OTel collector endpoint is reachable
+3. Verify authentication headers are correct
+4. Check collector logs for errors
+
+### High overhead from tracing
+
+1. Reduce granularity from `"all"` to `"operation"`
+2. Enable sampling in the OTel collector
+3. Use asynchronous span export
+
+### Missing log output
+
+1. Check log level configuration
+2. Verify log handlers are configured correctly
+3. Ensure log directory has write permissions
+4. Check `disable_existing_loggers` is `False`
+
+## Next Steps
+
+- Configure [Performance Tuning](/operations/performance)
+- Learn about [Configuration](/operations/configuration) options
+- Set up [Migrations](/operations/migrations)
