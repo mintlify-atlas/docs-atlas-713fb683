@@ -1,0 +1,157 @@
+{
+  "projectType": "data-platform",
+  "projectName": "Chroma",
+  "projectDescription": "Open-source vector database for AI applications with embedding storage, retrieval, and hybrid search capabilities",
+  "theme": "aspen",
+  "primaryColor": "#8B5CF6",
+  "lightColor": "#A78BFA",
+  "darkColor": "#6D28D9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/collections",
+              "concepts/embeddings",
+              "concepts/metadata",
+              "concepts/querying"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/client-server-mode",
+              "guides/embedding-functions",
+              "guides/filtering",
+              "guides/hybrid-search",
+              "guides/authentication",
+              "guides/multimodal"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/docker",
+              "deployment/kubernetes",
+              "deployment/cloud-providers"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "operations/configuration",
+              "operations/observability",
+              "operations/performance",
+              "operations/migrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Python Client",
+            "pages": [
+              "api/python/client",
+              "api/python/collection",
+              "api/python/types",
+              "api/python/search"
+            ]
+          },
+          {
+            "group": "JavaScript Client",
+            "pages": [
+              "api/javascript/client",
+              "api/javascript/collection",
+              "api/javascript/types"
+            ]
+          },
+          {
+            "group": "Go Client",
+            "pages": [
+              "api/go/overview"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "api/cli/commands",
+              "api/cli/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integrations",
+        "groups": [
+          {
+            "group": "Frameworks",
+            "pages": [
+              "integrations/langchain",
+              "integrations/llamaindex"
+            ]
+          },
+          {
+            "group": "Embedding Providers",
+            "pages": [
+              "integrations/openai",
+              "integrations/cohere",
+              "integrations/huggingface",
+              "integrations/sentence-transformers"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Vector embeddings storage and similarity search",
+    "Full-text search with metadata filtering",
+    "Hybrid search combining vector and keyword search",
+    "Multiple deployment modes (in-memory, persistent, client-server)",
+    "Multi-language client SDKs (Python, JavaScript, Go)",
+    "Built-in and custom embedding functions",
+    "HNSW and SPANN vector indexes",
+    "Sparse vector support",
+    "Authentication and authorization",
+    "Observability and telemetry"
+  ],
+  "publicApiSurface": [
+    "Client() - Create a Chroma client",
+    "client.create_collection() - Create a new collection",
+    "client.get_collection() - Get an existing collection",
+    "client.get_or_create_collection() - Get or create collection",
+    "client.delete_collection() - Delete a collection",
+    "collection.add() - Add documents to collection",
+    "collection.query() - Query similar documents",
+    "collection.get() - Get documents by ID or filter",
+    "collection.update() - Update existing documents",
+    "collection.delete() - Delete documents",
+    "collection.count() - Count documents in collection",
+    "collection.search() - Advanced search API",
+    "Search - Build complex search queries",
+    "Knn - KNN-based ranking for hybrid search",
+    "Rrf - Reciprocal Rank Fusion",
+    "Key / K - Field selection and where conditions",
+    "Settings - Configure client connection",
+    "Schema - Define collection schema",
+    "HnswIndexConfig - Configure HNSW index",
+    "SpannIndexConfig - Configure SPANN index",
+    "FtsIndexConfig - Configure full-text search",
+    "chroma run - Start Chroma server",
+    "chroma utils - CLI utilities"
+  ]
+}
